@@ -1,0 +1,2899 @@
+(function ($) {
+    'use strict';
+
+    var cfg = window.bwMediaFolders || window.bwMF || {};
+    if (!cfg.ajaxUrl || !cfg.nonce) {
+        return;
+    }
+    var currentPostType = String(cfg.postType || 'attachment');
+    var currentScreenContext = String(cfg.screenContext || (currentPostType === 'attachment' ? 'upload' : currentPostType));
+
+    var state = {
+        folders: [],
+        counts: { all: 0, unassigned: 0 },
+        activeFolder: cfg.active && cfg.active.folder ? parseInt(cfg.active.folder, 10) : 0,
+        activeUnassigned: !!(cfg.active && parseInt(cfg.active.unassigned, 10) === 1),
+        mode: (cfg.active && cfg.active.mode === 'grid') ? 'grid' : 'list'
+    };
+    var draggedIds = [];
+    var dragBadgeEl = null;
+    var INTERNAL_DRAG_KEY = '__BW_MF_INTERNAL_DRAG';
+    var FOLDER_NODE_SEL = '.bw-media-folder-node[data-term-id]';
+    var currentHoverNode = null;
+    var contextMenuTargetId = 0;
+    var contextMenuRowRef = null;
+    var contextMenuOpenTick = false;
+    var colorPopoverRowRef = null;
+    var colorSaveTimer = null;
+    var eventsBound = false;
+    var cornerIndicatorEnabled = !!(
+        (cfg.flags && parseInt(cfg.flags.cornerIndicator, 10) === 1) ||
+        parseInt(cfg.cornerIndicatorEnabled, 10) === 1
+    );
+    var badgeTooltipEnabled = parseInt(cfg.badgeTooltipEnabled, 10) === 1;
+    var markerObserver = null;
+    var markerCache = new Map();
+    var markerFailedIds = new Set();
+    var markerFetchInFlight = null;
+    var markerPendingIds = new Set();
+    var markerFetchWaiters = [];
+    var attachmentsBrowserEl = null;
+    var markerIntersectionObserver = null;
+    var markerVisibleTiles = new Set();
+    var markerObservedTiles = (typeof WeakSet !== 'undefined') ? new WeakSet() : null;
+    var badgeTooltipEl = null;
+    var badgeTooltipEventsBound = false;
+    var duplicateNoticeEl = null;
+    var duplicateNoticeMessageEl = null;
+    var quickTypeFilterActive = '';
+    var quickTypeFilterObserver = null;
+    var quickTypeFilterObserverTarget = null;
+    var quickTypeLayoutObserver = null;
+    var quickTypeMimeCache = new Map();
+    var quickTypeFiltersEventsBound = false;
+    var bwMfRefreshScheduled = false;
+    var bwMfRefreshReasons = [];
+    var bwMfRefreshCount = 0;
+    var bwMfRefreshRunCount = 0;
+    var gridToolbarEl = null;
+    var listToolbarEl = null;
+    var quickFiltersBarEl = null;
+    var folderByParentMap = {};
+    var folderCollapsedMap = {};
+    var FOLDER_COLLAPSED_KEY = 'bw_mf_folder_collapsed';
+
+    function isGridMode() {
+        return state.mode === 'grid' || !!document.querySelector('.attachments-browser');
+    }
+
+    function isUploadScreen() {
+        return !!(document.body && document.body.classList && document.body.classList.contains('upload-php'));
+    }
+
+    function isSupportedListScreen() {
+        if (!document.body || !document.body.classList) {
+            return false;
+        }
+
+        return document.body.classList.contains('upload-php') || document.body.classList.contains('edit-php');
+    }
+
+    function isMediaPostType() {
+        return currentPostType === 'attachment';
+    }
+
+    function getAttachmentsBrowserEl() {
+        if (attachmentsBrowserEl && document.body.contains(attachmentsBrowserEl)) {
+            return attachmentsBrowserEl;
+        }
+
+        attachmentsBrowserEl = document.querySelector('.attachments-browser');
+        return attachmentsBrowserEl;
+    }
+
+    function root() {
+        return $('#bw-media-folders-root');
+    }
+
+    function setInternalDrag(active) {
+        window[INTERNAL_DRAG_KEY] = !!active;
+    }
+
+    function isInternalDragActive() {
+        return !!window[INTERNAL_DRAG_KEY];
+    }
+
+    function debugLog(message, payload) {
+        if (!window.BW_MF_DEBUG) {
+            return;
+        }
+
+        if (payload) {
+            console.log('[BW_MF_DEBUG] ' + message, payload);
+            return;
+        }
+
+        console.log('[BW_MF_DEBUG] ' + message);
+    }
+
+    function clearDropHover() {
+        $('#bw-media-folders-tree .bw-media-folder-node, #bw-media-folders-defaults .bw-media-default--drop')
+            .removeClass('is-drag-over bw-mf-folder-drop-hover');
+        currentHoverNode = null;
+    }
+
+    function setCurrentHoverNode(node) {
+        if (currentHoverNode && currentHoverNode !== node) {
+            currentHoverNode.classList.remove('bw-mf-folder-drop-hover', 'is-drag-over');
+        }
+
+        if (!node) {
+            currentHoverNode = null;
+            return;
+        }
+
+        node.classList.add('bw-mf-folder-drop-hover', 'is-drag-over');
+        currentHoverNode = node;
+    }
+
+    function destroyDragBadge() {
+        if (dragBadgeEl && dragBadgeEl.parentNode) {
+            dragBadgeEl.parentNode.removeChild(dragBadgeEl);
+        }
+        dragBadgeEl = null;
+    }
+
+    function setupDragBadge(event, count, labelText) {
+        destroyDragBadge();
+        if (!event || !event.originalEvent || !event.originalEvent.dataTransfer || !count || count < 1) {
+            return;
+        }
+
+        var badge = document.createElement('div');
+        badge.className = 'bw-mf-drag-badge';
+        badge.textContent = labelText ? String(labelText) : (count + ' item' + (count === 1 ? '' : 's') + ' selected');
+        document.body.appendChild(badge);
+
+        try {
+            event.originalEvent.dataTransfer.setDragImage(badge, 0, 0);
+            dragBadgeEl = badge;
+        } catch (err) {
+            destroyDragBadge();
+        }
+    }
+
+    function ensureDuplicateNotice() {
+        if (duplicateNoticeEl && duplicateNoticeMessageEl && document.body.contains(duplicateNoticeEl)) {
+            return duplicateNoticeEl;
+        }
+
+        duplicateNoticeEl = document.createElement('div');
+        duplicateNoticeEl.className = 'bw-mf-duplicate-notice';
+        duplicateNoticeEl.setAttribute('aria-hidden', 'true');
+        duplicateNoticeEl.innerHTML =
+            '<div class="bw-mf-duplicate-notice__dialog" role="dialog" aria-modal="true" aria-label="Folder notice">' +
+            '  <p class="bw-mf-duplicate-notice__message"></p>' +
+            '</div>';
+        duplicateNoticeMessageEl = duplicateNoticeEl.querySelector('.bw-mf-duplicate-notice__message');
+
+        duplicateNoticeEl.addEventListener('click', function (event) {
+            if (event.target === duplicateNoticeEl) {
+                hideDuplicateNotice();
+            }
+        });
+
+        document.body.appendChild(duplicateNoticeEl);
+        return duplicateNoticeEl;
+    }
+
+    function showDuplicateNotice(message) {
+        var text = String(message || '').trim();
+        if (!text) {
+            return;
+        }
+
+        ensureDuplicateNotice();
+        if (!duplicateNoticeEl || !duplicateNoticeMessageEl) {
+            return;
+        }
+
+        duplicateNoticeMessageEl.textContent = text;
+        duplicateNoticeEl.classList.add('is-visible');
+        duplicateNoticeEl.setAttribute('aria-hidden', 'false');
+    }
+
+    function hideDuplicateNotice() {
+        if (!duplicateNoticeEl) {
+            return;
+        }
+
+        duplicateNoticeEl.classList.remove('is-visible');
+        duplicateNoticeEl.setAttribute('aria-hidden', 'true');
+    }
+
+    function copyTextToClipboard(text) {
+        var value = String(text || '').trim();
+        if (!value) {
+            return Promise.reject(new Error('empty-copy-value'));
+        }
+
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function' && window.isSecureContext) {
+            return navigator.clipboard.writeText(value);
+        }
+
+        return new Promise(function (resolve, reject) {
+            var textarea = document.createElement('textarea');
+            textarea.value = value;
+            textarea.setAttribute('readonly', 'readonly');
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            textarea.style.pointerEvents = 'none';
+            textarea.style.left = '-9999px';
+            document.body.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+
+            try {
+                if (document.execCommand('copy')) {
+                    resolve();
+                } else {
+                    reject(new Error('execCommand-copy-failed'));
+                }
+            } catch (err) {
+                reject(err);
+            } finally {
+                if (textarea.parentNode) {
+                    textarea.parentNode.removeChild(textarea);
+                }
+            }
+        });
+    }
+
+    function request(action, payload, onDone, options) {
+        var opts = options || {};
+        if (!action || !cfg.ajaxUrl || !cfg.nonce) {
+            return;
+        }
+
+        var body = $.extend({}, payload || {}, {
+            action: action,
+            nonce: cfg.nonce,
+            bw_mf_context: currentScreenContext
+        });
+
+        $.post(cfg.ajaxUrl, body)
+            .done(function (res) {
+                if (!res || !res.success) {
+                    var msg = res && res.data && res.data.message ? res.data.message : 'Request failed';
+                    if (!opts.silent) {
+                        window.alert(msg);
+                    }
+                    return;
+                }
+
+                if (typeof onDone === 'function') {
+                    onDone(res.data || {});
+                }
+            })
+            .fail(function () {
+                if (!opts.silent) {
+                    window.alert('Request failed');
+                }
+            });
+    }
+
+    function isValidHexColor(color) {
+        return /^#[0-9a-f]{6}$/i.test(String(color || ''));
+    }
+
+    function scheduleBwMfRefresh(reason) {
+        if (!isSupportedListScreen()) {
+            return;
+        }
+
+        if (reason) {
+            bwMfRefreshReasons.push(reason);
+        }
+
+        bwMfRefreshCount += 1;
+        if (bwMfRefreshScheduled) {
+            return;
+        }
+
+        bwMfRefreshScheduled = true;
+        window.requestAnimationFrame(function () {
+            bwMfRefreshScheduled = false;
+            bwMfRefreshRunCount += 1;
+            if (window.BW_MF_DEBUG) {
+                debugLog('refresh coalesced', {
+                    scheduled: bwMfRefreshCount,
+                    runs: bwMfRefreshRunCount,
+                    reasons: bwMfRefreshReasons.slice(-6)
+                });
+            }
+            bwMfRefreshCount = 0;
+            bwMfRefreshReasons = [];
+
+            if (isMediaPostType()) {
+                ensureTypeFiltersPlacement();
+                if (cornerIndicatorEnabled && isGridMode()) {
+                    observeGridTilesForCorners();
+                    bwMfApplyCornerMarkers();
+                } else if (!cornerIndicatorEnabled) {
+                    clearCornerMarkers();
+                }
+                recomputeQuickTypeFilters();
+            } else if (cornerIndicatorEnabled) {
+                bwMfApplyListRowMarkers();
+            } else {
+                clearListRowMarkers();
+            }
+        });
+    }
+
+    function scheduleCornerMarkerRefresh() {
+        if (!isMediaPostType() || !cornerIndicatorEnabled) {
+            disableCornerMarkers();
+            return;
+        }
+        scheduleBwMfRefresh('corner');
+    }
+
+    function getVisibleGridTiles() {
+        var browser = getAttachmentsBrowserEl();
+        if (!browser) {
+            return [];
+        }
+
+        return Array.prototype.slice.call(browser.querySelectorAll('.attachment[data-id]'));
+    }
+
+    function initCornerIntersectionObserver() {
+        if (markerIntersectionObserver || typeof IntersectionObserver === 'undefined') {
+            return;
+        }
+
+        if (window.__BW_MF_CORNER_IO && typeof window.__BW_MF_CORNER_IO.observe === 'function') {
+            markerIntersectionObserver = window.__BW_MF_CORNER_IO;
+            return;
+        }
+
+        markerIntersectionObserver = new IntersectionObserver(function (entries) {
+            entries.forEach(function (entry) {
+                if (!entry || !entry.target) {
+                    return;
+                }
+
+                if (entry.isIntersecting) {
+                    markerVisibleTiles.add(entry.target);
+                } else {
+                    markerVisibleTiles.delete(entry.target);
+                }
+            });
+
+            scheduleCornerMarkerRefresh();
+        }, {
+            root: null,
+            threshold: 0
+        });
+
+        window.__BW_MF_CORNER_IO = markerIntersectionObserver;
+    }
+
+    function observeGridTilesForCorners() {
+        if (!cornerIndicatorEnabled || !isGridMode()) {
+            return;
+        }
+
+        initCornerIntersectionObserver();
+
+        var tiles = getVisibleGridTiles();
+        if (!tiles.length) {
+            return;
+        }
+
+        if (!markerIntersectionObserver) {
+            markerVisibleTiles.clear();
+            tiles.forEach(function (tile) {
+                markerVisibleTiles.add(tile);
+            });
+            return;
+        }
+
+        tiles.forEach(function (tile) {
+            if (markerObservedTiles && markerObservedTiles.has(tile)) {
+                return;
+            }
+
+            if (markerObservedTiles) {
+                markerObservedTiles.add(tile);
+            }
+
+            markerIntersectionObserver.observe(tile);
+        });
+    }
+
+    function getCornerWorkingTiles() {
+        if (!markerIntersectionObserver) {
+            return getVisibleGridTiles();
+        }
+
+        var tiles = [];
+        markerVisibleTiles.forEach(function (tile) {
+            if (!tile || !document.body.contains(tile)) {
+                markerVisibleTiles.delete(tile);
+                return;
+            }
+            tiles.push(tile);
+        });
+
+        return tiles;
+    }
+
+    function clearCornerMarkers() {
+        getCornerWorkingTiles().forEach(function (tile) {
+            if (tile.classList.contains('bw-mf-marked')) {
+                tile.classList.remove('bw-mf-marked');
+            }
+            if (tile.style.getPropertyValue('--bw-mf-marker-color')) {
+                tile.style.removeProperty('--bw-mf-marker-color');
+            }
+            if (tile.hasAttribute('data-bw-mf-folder-name')) {
+                tile.removeAttribute('data-bw-mf-folder-name');
+            }
+        });
+    }
+
+    function getVisibleListRows() {
+        return Array.prototype.slice.call(document.querySelectorAll('.wp-list-table tbody tr[id^="post-"]'));
+    }
+
+    function clearListRowMarkers() {
+        getVisibleListRows().forEach(function (row) {
+            var markerEl = row.querySelector('.column-bw_mf_drag_handle .bw-mf-row-folder-marker');
+            if (markerEl && markerEl.parentNode) {
+                markerEl.parentNode.removeChild(markerEl);
+            }
+        });
+    }
+
+    function disableCornerMarkers() {
+        if (markerObserver) {
+            markerObserver.disconnect();
+            markerObserver = null;
+        }
+
+        if (markerIntersectionObserver && typeof markerIntersectionObserver.disconnect === 'function') {
+            markerIntersectionObserver.disconnect();
+        }
+
+        markerVisibleTiles.clear();
+        markerObservedTiles = (typeof WeakSet !== 'undefined') ? new WeakSet() : null;
+
+        clearCornerMarkers();
+        clearListRowMarkers();
+        hideBadgeTooltip();
+    }
+
+    function getCornerViewContext() {
+        var folderId = 0;
+        var unassigned = false;
+
+        try {
+            var url = new URL(window.location.href);
+            folderId = absint(url.searchParams.get('bw_media_folder'));
+            unassigned = String(url.searchParams.get('bw_media_unassigned') || '') === '1';
+        } catch (e) {
+            folderId = 0;
+            unassigned = false;
+        }
+
+        if (folderId <= 0 && !unassigned) {
+            if (state.activeFolder > 0) {
+                folderId = state.activeFolder;
+            } else if (state.activeUnassigned) {
+                unassigned = true;
+            }
+        }
+
+        return {
+            folderId: folderId > 0 ? folderId : 0,
+            unassigned: !!unassigned
+        };
+    }
+
+    function absint(value) {
+        var parsed = parseInt(value, 10);
+        return parsed > 0 ? parsed : 0;
+    }
+
+    function getQuickTypeDefinitions() {
+        return [
+            { key: 'video', label: 'Video' },
+            { key: 'jpeg', label: 'JPEG' },
+            { key: 'png', label: 'PNG' },
+            { key: 'svg', label: 'SVG' },
+            { key: 'fonts', label: 'Fonts' }
+        ];
+    }
+
+    function normalizeMimeType(mime) {
+        return String(mime || '').trim().toLowerCase();
+    }
+
+    function getFileExtension(value) {
+        var text = String(value || '').trim().toLowerCase();
+        if (!text) {
+            return '';
+        }
+
+        var clean = text.split('?')[0].split('#')[0];
+        var dot = clean.lastIndexOf('.');
+        if (dot < 0 || dot === clean.length - 1) {
+            return '';
+        }
+
+        return clean.substring(dot + 1);
+    }
+
+    function mapExtensionToMime(extension) {
+        var ext = String(extension || '').toLowerCase();
+        if (!ext) {
+            return '';
+        }
+
+        if (ext === 'jpg' || ext === 'jpeg') {
+            return 'image/jpeg';
+        }
+        if (ext === 'png') {
+            return 'image/png';
+        }
+        if (ext === 'svg') {
+            return 'image/svg+xml';
+        }
+        if (ext === 'woff') {
+            return 'font/woff';
+        }
+        if (ext === 'woff2') {
+            return 'font/woff2';
+        }
+        if (ext === 'ttf') {
+            return 'font/ttf';
+        }
+        if (ext === 'otf') {
+            return 'font/otf';
+        }
+        if (ext === 'eot') {
+            return 'application/vnd.ms-fontobject';
+        }
+        if (ext === 'mp4') {
+            return 'video/mp4';
+        }
+        if (ext === 'mov') {
+            return 'video/quicktime';
+        }
+        if (ext === 'm4v') {
+            return 'video/x-m4v';
+        }
+        if (ext === 'webm') {
+            return 'video/webm';
+        }
+        if (ext === 'ogv' || ext === 'ogg') {
+            return 'video/ogg';
+        }
+
+        return '';
+    }
+
+    function getMimeFromClasses(node) {
+        if (!node || !node.className) {
+            return '';
+        }
+
+        var classes = String(node.className).split(/\s+/);
+        if (classes.indexOf('type-video') !== -1) {
+            return 'video/*';
+        }
+
+        if (classes.indexOf('type-font') !== -1) {
+            return 'font/*';
+        }
+
+        var subtypeClass = classes.find(function (className) {
+            return className.indexOf('subtype-') === 0;
+        });
+
+        if (subtypeClass) {
+            var subtype = subtypeClass.replace('subtype-', '').toLowerCase();
+            if (subtype === 'jpeg' || subtype === 'jpg') {
+                return 'image/jpeg';
+            }
+            if (subtype === 'png') {
+                return 'image/png';
+            }
+            if (subtype.indexOf('svg') !== -1) {
+                return 'image/svg+xml';
+            }
+            if (subtype === 'woff' || subtype === 'woff2' || subtype === 'ttf' || subtype === 'otf') {
+                return 'font/' + subtype;
+            }
+            if (subtype === 'vnd-ms-fontobject' || subtype === 'eot') {
+                return 'application/vnd.ms-fontobject';
+            }
+            if (subtype === 'mp4') {
+                return 'video/mp4';
+            }
+        }
+
+        return '';
+    }
+
+    function getMimeFromMediaModel(id) {
+        if (!(id > 0) || !(window.wp && wp.media && wp.media.model && wp.media.model.Attachment)) {
+            return '';
+        }
+
+        try {
+            var model = wp.media.model.Attachment.get(id);
+            if (!model || typeof model.get !== 'function') {
+                return '';
+            }
+
+            var mime = normalizeMimeType(model.get('mime'));
+            if (mime) {
+                return mime;
+            }
+
+            var type = normalizeMimeType(model.get('type'));
+            var subtype = normalizeMimeType(model.get('subtype'));
+            if (type && subtype) {
+                return type + '/' + subtype;
+            }
+        } catch (e) {
+            return '';
+        }
+
+        return '';
+    }
+
+    function detectMimeForNode(node, id) {
+        if (!node) {
+            return '';
+        }
+
+        var attrMime = normalizeMimeType(node.getAttribute('data-mime'));
+        if (attrMime) {
+            return attrMime;
+        }
+
+        var modelMime = getMimeFromMediaModel(id);
+        if (modelMime) {
+            return modelMime;
+        }
+
+        var classMime = getMimeFromClasses(node);
+        if (classMime) {
+            return classMime;
+        }
+
+        var fileText = '';
+        var titleNode = node.querySelector('.column-title strong a, .attachment-filename, .filename');
+        if (titleNode) {
+            fileText = titleNode.textContent || '';
+        }
+        if (!fileText) {
+            fileText = node.getAttribute('aria-label') || '';
+        }
+        var ext = getFileExtension(fileText);
+        if (ext) {
+            return mapExtensionToMime(ext);
+        }
+
+        return '';
+    }
+
+    function mapMimeToQuickType(mime) {
+        var normalized = normalizeMimeType(mime);
+        if (!normalized) {
+            return '';
+        }
+
+        if (normalized.indexOf('video/') === 0 || normalized === 'video/*') {
+            return 'video';
+        }
+
+        if (normalized === 'image/jpeg' || normalized === 'image/jpg') {
+            return 'jpeg';
+        }
+
+        if (normalized === 'image/png') {
+            return 'png';
+        }
+
+        if (normalized === 'image/svg+xml') {
+            return 'svg';
+        }
+
+        if (
+            normalized.indexOf('font/') === 0 ||
+            normalized.indexOf('application/font') === 0 ||
+            normalized.indexOf('application/x-font') === 0 ||
+            normalized === 'application/vnd.ms-fontobject' ||
+            normalized === 'font/woff' ||
+            normalized === 'font/woff2' ||
+            normalized === 'font/ttf' ||
+            normalized === 'font/otf'
+        ) {
+            return 'fonts';
+        }
+
+        return '';
+    }
+
+    function getAttachmentNodesForQuickFilters() {
+        if (isGridMode()) {
+            return Array.prototype.slice.call(document.querySelectorAll('.attachments-browser .attachment[data-id]'));
+        }
+
+        return Array.prototype.slice.call(document.querySelectorAll('#the-list tr[id^="post-"]'));
+    }
+
+    function getAttachmentIdFromQuickNode(node) {
+        if (!node) {
+            return 0;
+        }
+
+        var dataId = absint(node.getAttribute('data-id'));
+        if (dataId > 0) {
+            return dataId;
+        }
+
+        var rowId = String(node.getAttribute('id') || '');
+        if (rowId.indexOf('post-') === 0) {
+            return absint(rowId.replace('post-', ''));
+        }
+
+        return 0;
+    }
+
+    function ensureQuickFiltersToolbar() {
+        if (quickFiltersBarEl && document.body.contains(quickFiltersBarEl)) {
+            return quickFiltersBarEl;
+        }
+
+        var bar = document.getElementById('bw-mf-type-filters');
+        if (!bar) {
+            bar = document.createElement('div');
+            bar.id = 'bw-mf-type-filters';
+            bar.className = 'bw-mf-type-filters';
+            getQuickTypeDefinitions().forEach(function (def) {
+                var button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'bw-mf-type-filter';
+                button.setAttribute('data-filter', def.key);
+                button.innerHTML = '<span class="bw-mf-type-filter__label">' + def.label + '</span><span class="bw-mf-type-filter__count">0</span>';
+                bar.appendChild(button);
+            });
+        }
+
+        quickFiltersBarEl = bar;
+        return bar;
+    }
+
+    function ensureTypeFiltersPlacement() {
+        var bar = ensureQuickFiltersToolbar();
+        if (!bar) {
+            return null;
+        }
+
+        var legacyRow = document.querySelector('.bw-mf-toolbar-row--typefilters');
+        if (legacyRow && legacyRow !== bar.parentNode) {
+            legacyRow.parentNode.removeChild(legacyRow);
+        }
+
+        var body = document.body;
+        if (!gridToolbarEl || !document.body.contains(gridToolbarEl)) {
+            gridToolbarEl = document.querySelector('.media-toolbar');
+        }
+        if (!listToolbarEl || !document.body.contains(listToolbarEl)) {
+            listToolbarEl = document.querySelector('.tablenav.top');
+        }
+
+        var gridSecondary = gridToolbarEl ? gridToolbarEl.querySelector('.media-toolbar-secondary') : null;
+        var gridPrimary = gridToolbarEl ? (gridToolbarEl.querySelector('.media-toolbar-primary') || gridToolbarEl) : null;
+        var listBar = listToolbarEl;
+        var preferredContainer = gridSecondary || gridPrimary || null;
+
+        if (!preferredContainer && listBar) {
+            preferredContainer = listBar.querySelector('.actions') ||
+                (listBar.querySelector('.tablenav-pages') ? listBar.querySelector('.tablenav-pages').parentElement : null) ||
+                listBar;
+        }
+
+        var inline = !!preferredContainer;
+        var wrapper = document.querySelector('.bw-mf-toolbar-inline');
+
+        if (!wrapper) {
+            wrapper = document.createElement('div');
+            wrapper.className = 'bw-mf-toolbar-inline';
+        }
+
+        if (!preferredContainer) {
+            var fallbackAnchor = document.querySelector('#wpbody-content .wrap') || document.querySelector('#wpbody-content h1');
+            if (fallbackAnchor && fallbackAnchor.parentNode) {
+                if (wrapper.parentNode !== fallbackAnchor.parentNode || wrapper.previousElementSibling !== fallbackAnchor) {
+                    fallbackAnchor.parentNode.insertBefore(wrapper, fallbackAnchor.nextSibling);
+                }
+                if (bar.parentNode !== wrapper) {
+                    wrapper.appendChild(bar);
+                }
+            }
+            body.classList.remove('bw-mf-has-typefilters-inline');
+            return wrapper;
+        }
+
+        if (wrapper.parentNode !== preferredContainer) {
+            preferredContainer.appendChild(wrapper);
+        }
+
+        if (bar.parentNode !== wrapper) {
+            wrapper.appendChild(bar);
+        }
+
+        body.classList.toggle('bw-mf-has-typefilters-inline', inline);
+        return wrapper;
+    }
+
+    function updateQuickFilterCounts(counts) {
+        var bar = document.getElementById('bw-mf-type-filters');
+        if (!bar) {
+            return;
+        }
+
+        getQuickTypeDefinitions().forEach(function (def) {
+            var button = bar.querySelector('.bw-mf-type-filter[data-filter="' + def.key + '"]');
+            if (!button) {
+                return;
+            }
+
+            var countEl = button.querySelector('.bw-mf-type-filter__count');
+            if (countEl) {
+                countEl.textContent = String(counts[def.key] || 0);
+            }
+            button.classList.toggle('is-active', quickTypeFilterActive === def.key);
+        });
+    }
+
+    function setQuickTypeNodeVisibility(node, visible) {
+        if (!node) {
+            return;
+        }
+
+        var shouldHide = !visible;
+        if (node.classList.contains('bw-mf-type-hidden') === shouldHide) {
+            return;
+        }
+
+        node.classList.toggle('bw-mf-type-hidden', shouldHide);
+    }
+
+    function recomputeQuickTypeFilters() {
+        if (!isUploadScreen()) {
+            return;
+        }
+
+        var bar = ensureQuickFiltersToolbar();
+        if (!bar) {
+            return;
+        }
+
+        var counts = { video: 0, jpeg: 0, png: 0, svg: 0, fonts: 0 };
+        var nodes = getAttachmentNodesForQuickFilters();
+
+        nodes.forEach(function (node) {
+            var id = getAttachmentIdFromQuickNode(node);
+            if (!(id > 0)) {
+                setQuickTypeNodeVisibility(node, !quickTypeFilterActive);
+                return;
+            }
+
+            var mime = quickTypeMimeCache.get(id);
+            if (!mime) {
+                mime = detectMimeForNode(node, id);
+                if (mime) {
+                    quickTypeMimeCache.set(id, mime);
+                }
+            }
+
+            var typeKey = mapMimeToQuickType(mime);
+            if (typeKey && counts[typeKey] !== undefined) {
+                counts[typeKey] += 1;
+            }
+
+            if (!quickTypeFilterActive) {
+                setQuickTypeNodeVisibility(node, true);
+                return;
+            }
+
+            setQuickTypeNodeVisibility(node, quickTypeFilterActive === typeKey);
+        });
+
+        updateQuickFilterCounts(counts);
+    }
+
+    function scheduleQuickTypeFiltersRefresh() {
+        scheduleBwMfRefresh('types');
+    }
+
+    function mutationNodeHasAttachment(node) {
+        if (!node || node.nodeType !== 1) {
+            return false;
+        }
+
+        if (node.matches && (node.matches('.attachment') || node.matches('.attachments-browser'))) {
+            return true;
+        }
+
+        return !!(node.querySelector && node.querySelector('.attachment'));
+    }
+
+    function mutationsContainAttachmentChanges(mutations) {
+        for (var i = 0; i < mutations.length; i += 1) {
+            var mutation = mutations[i];
+            if (!mutation) {
+                continue;
+            }
+
+            if (mutation.type === 'attributes') {
+                if (mutation.attributeName === 'class') {
+                    var target = mutation.target;
+                    if (target && target.nodeType === 1 && target.matches && (target.matches('.attachment') || target.matches('.attachments-browser') || target.matches('.attachments-browser *'))) {
+                        return true;
+                    }
+                }
+                continue;
+            }
+
+            if (mutation.type !== 'childList') {
+                continue;
+            }
+
+            var added = mutation.addedNodes || [];
+            for (var a = 0; a < added.length; a += 1) {
+                if (mutationNodeHasAttachment(added[a])) {
+                    return true;
+                }
+            }
+
+            var removed = mutation.removedNodes || [];
+            for (var r = 0; r < removed.length; r += 1) {
+                if (mutationNodeHasAttachment(removed[r])) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    function mutationsContainLayoutChanges(mutations) {
+        for (var i = 0; i < mutations.length; i += 1) {
+            var mutation = mutations[i];
+            if (!mutation || mutation.type !== 'childList') {
+                continue;
+            }
+
+            var collections = [mutation.addedNodes || [], mutation.removedNodes || []];
+            for (var c = 0; c < collections.length; c += 1) {
+                var nodes = collections[c];
+                for (var n = 0; n < nodes.length; n += 1) {
+                    var node = nodes[n];
+                    if (!node || node.nodeType !== 1) {
+                        continue;
+                    }
+                    if (node.matches && (node.matches('.media-toolbar') || node.matches('.tablenav.top') || node.matches('.attachments-browser') || node.matches('#the-list'))) {
+                        return true;
+                    }
+                    if (node.querySelector && node.querySelector('.media-toolbar, .tablenav.top, .attachments-browser, #the-list')) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    function bindQuickTypeFilterObserver() {
+        if (!isMediaPostType()) {
+            return;
+        }
+
+        if (quickTypeFilterObserver && quickTypeFilterObserverTarget && document.body.contains(quickTypeFilterObserverTarget)) {
+            return;
+        }
+
+        var target = isGridMode()
+            ? document.querySelector('.attachments-browser')
+            : document.querySelector('#the-list');
+
+        if (!target || typeof MutationObserver === 'undefined') {
+            return;
+        }
+
+        if (quickTypeFilterObserver) {
+            quickTypeFilterObserver.disconnect();
+        }
+
+        quickTypeFilterObserverTarget = target;
+        quickTypeFilterObserver = new MutationObserver(function (mutations) {
+            if (!mutationsContainAttachmentChanges(mutations || [])) {
+                return;
+            }
+            scheduleBwMfRefresh('types-observer');
+        });
+        quickTypeFilterObserver.observe(target, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+    }
+
+    function bindQuickTypeLayoutObserver() {
+        if (!isMediaPostType()) {
+            return;
+        }
+
+        if (quickTypeLayoutObserver) {
+            return;
+        }
+
+        if (typeof MutationObserver === 'undefined') {
+            return;
+        }
+
+        var target = document.querySelector('#wpbody-content') || document.body;
+        if (!target) {
+            return;
+        }
+
+        quickTypeLayoutObserver = new MutationObserver(function (mutations) {
+            if (!mutationsContainLayoutChanges(mutations || [])) {
+                return;
+            }
+            scheduleBwMfRefresh('layout-observer');
+        });
+        quickTypeLayoutObserver.observe(target, { childList: true, subtree: true });
+    }
+
+    function bindQuickTypeFilterEvents() {
+        if (!isMediaPostType()) {
+            return;
+        }
+
+        if (quickTypeFiltersEventsBound) {
+            return;
+        }
+        quickTypeFiltersEventsBound = true;
+
+        $(document)
+            .off('click.bwMfTypeFilters', '#bw-mf-type-filters .bw-mf-type-filter')
+            .on('click.bwMfTypeFilters', '#bw-mf-type-filters .bw-mf-type-filter', function (e) {
+                e.preventDefault();
+                var filterKey = String($(this).attr('data-filter') || '');
+                if (!filterKey) {
+                    return;
+                }
+
+                if (quickTypeFilterActive === filterKey) {
+                    quickTypeFilterActive = '';
+                } else {
+                    quickTypeFilterActive = filterKey;
+                }
+                scheduleQuickTypeFiltersRefresh();
+            });
+    }
+
+    function resolveFolderViewColor(folderId) {
+        var defaultColor = '#000';
+        if (!(folderId > 0)) {
+            return defaultColor;
+        }
+
+        var row = document.querySelector('.bw-media-folder-node[data-term-id="' + folderId + '"]');
+        if (row) {
+            var attrColor = row.getAttribute('data-icon-color');
+            if (isValidHexColor(attrColor)) {
+                return attrColor;
+            }
+
+            var cssVar = row.style ? row.style.getPropertyValue('--bw-mf-icon-color') : '';
+            if (!cssVar) {
+                cssVar = window.getComputedStyle(row).getPropertyValue('--bw-mf-icon-color');
+            }
+
+            cssVar = String(cssVar || '').trim();
+            if (isValidHexColor(cssVar)) {
+                return cssVar;
+            }
+        }
+
+        var folder = state.folders.find(function (item) {
+            return parseInt(item.id, 10) === folderId;
+        });
+        if (folder && isValidHexColor(folder.icon_color)) {
+            return folder.icon_color;
+        }
+
+        return defaultColor;
+    }
+
+    function collectVisibleAttachmentIds(tiles) {
+        var ids = [];
+        (tiles || []).forEach(function (tile) {
+            var id = parseInt(tile.getAttribute('data-id') || '0', 10);
+            if (id > 0) {
+                ids.push(id);
+            }
+        });
+
+        return Array.from(new Set(ids)).slice(0, 200);
+    }
+
+    function collectVisibleListRowIds(rows) {
+        var ids = [];
+        (rows || []).forEach(function (row) {
+            if (!row || !row.id) {
+                return;
+            }
+
+            var match = String(row.id).match(/^post-(\d+)$/);
+            if (!match) {
+                return;
+            }
+
+            var id = parseInt(match[1], 10);
+            if (id > 0) {
+                ids.push(id);
+            }
+        });
+
+        return Array.from(new Set(ids)).slice(0, 200);
+    }
+
+    function getMarkerPendingBatch(maxBatch) {
+        var batch = [];
+        markerPendingIds.forEach(function (id) {
+            if (batch.length >= maxBatch) {
+                return;
+            }
+            batch.push(id);
+        });
+        return batch;
+    }
+
+    function flushMarkerWaiters() {
+        if (!markerFetchWaiters.length) {
+            return;
+        }
+
+        var waiters = markerFetchWaiters.slice();
+        markerFetchWaiters = [];
+        waiters.forEach(function (cb) {
+            if (typeof cb === 'function') {
+                cb();
+            }
+        });
+    }
+
+    function fetchCornerMarkers(ids, onDone) {
+        if (typeof onDone === 'function') {
+            markerFetchWaiters.push(onDone);
+        }
+
+        (ids || []).forEach(function (id) {
+            var parsed = parseInt(id, 10);
+            if (parsed > 0 && !markerCache.has(parsed) && !markerFailedIds.has(parsed)) {
+                markerPendingIds.add(parsed);
+            }
+        });
+
+        if (!markerPendingIds.size) {
+            flushMarkerWaiters();
+            return null;
+        }
+
+        if (markerFetchInFlight) {
+            debugLog('corner markers fetch skipped (inFlight)', { pending: markerPendingIds.size });
+            return markerFetchInFlight;
+        }
+
+        var batch = getMarkerPendingBatch(200);
+        if (!batch.length) {
+            flushMarkerWaiters();
+            return null;
+        }
+
+        var requestData = {
+            action: 'bw_mf_get_corner_markers',
+            nonce: cfg.nonce,
+            bw_mf_context: currentScreenContext,
+        };
+        if (isMediaPostType()) {
+            requestData.attachment_ids = batch;
+        } else {
+            requestData.object_ids = batch;
+        }
+
+        markerFetchInFlight = $.post(cfg.ajaxUrl, requestData)
+            .done(function (res) {
+                if (!res || !res.success || !res.data || typeof res.data.markers !== 'object') {
+                    return;
+                }
+
+                var markers = res.data.markers;
+                Object.keys(markers).forEach(function (idKey) {
+                    var id = parseInt(idKey, 10);
+                    if (!(id > 0)) {
+                        return;
+                    }
+
+                    var marker = markers[idKey] || {};
+                    markerCache.set(id, {
+                        assigned: !!marker.assigned,
+                        color: isValidHexColor(marker.color) ? marker.color : null,
+                        folder_name: marker.folder_name ? String(marker.folder_name) : ''
+                    });
+                    markerFailedIds.delete(id);
+                    markerPendingIds.delete(id);
+                });
+            })
+            .fail(function () {
+                batch.forEach(function (id) {
+                    markerFailedIds.add(id);
+                    markerPendingIds.delete(id);
+                });
+            })
+            .always(function () {
+                markerFetchInFlight = null;
+                flushMarkerWaiters();
+                debugLog('corner markers fetch done', { pending: markerPendingIds.size });
+                if (markerPendingIds.size > 0) {
+                    scheduleBwMfRefresh('corner-markers');
+                }
+            });
+
+        return markerFetchInFlight;
+    }
+
+    function setTileCornerMarker(tile, marker) {
+        if (!tile) {
+            return;
+        }
+
+        if (!marker || !marker.assigned) {
+            if (tile.classList.contains('bw-mf-marked')) {
+                tile.classList.remove('bw-mf-marked');
+            }
+            if (tile.style.getPropertyValue('--bw-mf-marker-color')) {
+                tile.style.removeProperty('--bw-mf-marker-color');
+            }
+            if (tile.hasAttribute('data-bw-mf-folder-name')) {
+                tile.removeAttribute('data-bw-mf-folder-name');
+            }
+            return;
+        }
+
+        if (!tile.classList.contains('bw-mf-marked')) {
+            tile.classList.add('bw-mf-marked');
+        }
+        var targetColor = marker.color || '#000';
+        if (tile.style.getPropertyValue('--bw-mf-marker-color') !== targetColor) {
+            tile.style.setProperty('--bw-mf-marker-color', targetColor);
+        }
+        if (marker.folder_name) {
+            tile.setAttribute('data-bw-mf-folder-name', marker.folder_name);
+        } else if (tile.hasAttribute('data-bw-mf-folder-name')) {
+            tile.removeAttribute('data-bw-mf-folder-name');
+        }
+    }
+
+    function setListRowMarker(row, marker) {
+        if (!row) {
+            return;
+        }
+
+        var dragCell = row.querySelector('.column-bw_mf_drag_handle');
+        if (!dragCell) {
+            return;
+        }
+
+        var markerEl = dragCell.querySelector('.bw-mf-row-folder-marker');
+        if (!marker || !marker.assigned) {
+            if (markerEl && markerEl.parentNode) {
+                markerEl.parentNode.removeChild(markerEl);
+            }
+            return;
+        }
+
+        if (!markerEl) {
+            markerEl = document.createElement('span');
+            markerEl.className = 'bw-mf-row-folder-marker';
+            markerEl.setAttribute('aria-hidden', 'true');
+            dragCell.appendChild(markerEl);
+        }
+
+        var targetColor = marker.color || '#000';
+        if (markerEl.style.getPropertyValue('--bw-mf-marker-color') !== targetColor) {
+            markerEl.style.setProperty('--bw-mf-marker-color', targetColor);
+        }
+        if (marker.folder_name) {
+            markerEl.setAttribute('title', marker.folder_name);
+        } else {
+            markerEl.removeAttribute('title');
+        }
+    }
+
+    function bwMfApplyCornerMarkers() {
+        if (!cornerIndicatorEnabled) {
+            disableCornerMarkers();
+            return;
+        }
+
+        if (!isGridMode()) {
+            return;
+        }
+
+        bindCornerMarkerObserver();
+        observeGridTilesForCorners();
+
+        var tiles = getCornerWorkingTiles();
+        if (!tiles.length) {
+            return;
+        }
+
+        var viewCtx = getCornerViewContext();
+        if (viewCtx.unassigned) {
+            clearCornerMarkers();
+            return;
+        }
+
+        if (viewCtx.folderId > 0) {
+            var folderColor = resolveFolderViewColor(viewCtx.folderId);
+            var folder = state.folders.find(function (item) {
+                return parseInt(item.id, 10) === viewCtx.folderId;
+            });
+            var folderName = folder && folder.name ? String(folder.name) : '';
+            tiles.forEach(function (tile) {
+                setTileCornerMarker(tile, {
+                    assigned: true,
+                    color: folderColor,
+                    folder_name: folderName
+                });
+            });
+            return;
+        }
+
+        var visibleIds = collectVisibleAttachmentIds(tiles);
+        var missingIds = visibleIds.filter(function (id) {
+            return !markerCache.has(id) && !markerFailedIds.has(id);
+        });
+
+        var apply = function () {
+            getCornerWorkingTiles().forEach(function (tile) {
+                var id = parseInt(tile.getAttribute('data-id') || '0', 10);
+                setTileCornerMarker(tile, markerCache.get(id));
+            });
+        };
+
+        if (!missingIds.length) {
+            apply();
+            return;
+        }
+
+        fetchCornerMarkers(missingIds, function () {
+            missingIds.forEach(function (id) {
+                if (!markerCache.has(id)) {
+                    markerFailedIds.add(id);
+                }
+            });
+            apply();
+        });
+    }
+
+    function bwMfApplyListRowMarkers() {
+        if (!cornerIndicatorEnabled || isMediaPostType()) {
+            clearListRowMarkers();
+            return;
+        }
+
+        var rows = getVisibleListRows();
+        if (!rows.length) {
+            return;
+        }
+
+        var rowIds = collectVisibleListRowIds(rows);
+        var missingIds = rowIds.filter(function (id) {
+            return !markerCache.has(id) && !markerFailedIds.has(id);
+        });
+
+        var apply = function () {
+            rows.forEach(function (row) {
+                var match = String(row.id || '').match(/^post-(\d+)$/);
+                var id = match ? parseInt(match[1], 10) : 0;
+                setListRowMarker(row, markerCache.get(id));
+            });
+        };
+
+        if (!missingIds.length) {
+            apply();
+            return;
+        }
+
+        fetchCornerMarkers(missingIds, function () {
+            missingIds.forEach(function (id) {
+                if (!markerCache.has(id)) {
+                    markerFailedIds.add(id);
+                }
+            });
+            apply();
+        });
+    }
+
+    function bindCornerMarkerObserver() {
+        if (!cornerIndicatorEnabled || !isGridMode() || markerObserver) {
+            return;
+        }
+
+        var attachmentsRoot = getAttachmentsBrowserEl();
+        if (!attachmentsRoot || typeof MutationObserver === 'undefined') {
+            return;
+        }
+
+        markerObserver = new MutationObserver(function (mutations) {
+            if (!mutationsContainAttachmentChanges(mutations || [])) {
+                return;
+            }
+            scheduleBwMfRefresh('marker-observer');
+        });
+        markerObserver.observe(attachmentsRoot, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+    }
+
+    function ensureBadgeTooltipEl() {
+        if (!cornerIndicatorEnabled || !badgeTooltipEnabled) {
+            return null;
+        }
+
+        if (badgeTooltipEl && document.body.contains(badgeTooltipEl)) {
+            return badgeTooltipEl;
+        }
+
+        badgeTooltipEl = document.createElement('div');
+        badgeTooltipEl.id = 'bw-mf-badge-tooltip';
+        badgeTooltipEl.className = 'bw-mf-badge-tooltip';
+        badgeTooltipEl.setAttribute('aria-hidden', 'true');
+        document.body.appendChild(badgeTooltipEl);
+        return badgeTooltipEl;
+    }
+
+    function hideBadgeTooltip() {
+        if (!badgeTooltipEl) {
+            return;
+        }
+
+        badgeTooltipEl.classList.remove('is-visible');
+        badgeTooltipEl.setAttribute('aria-hidden', 'true');
+    }
+
+    function showBadgeTooltipForTile(tile) {
+        if (!cornerIndicatorEnabled || !badgeTooltipEnabled || !tile) {
+            return;
+        }
+
+        var folderName = String(tile.getAttribute('data-bw-mf-folder-name') || '').trim();
+        if (!folderName) {
+            hideBadgeTooltip();
+            return;
+        }
+
+        var tooltip = ensureBadgeTooltipEl();
+        if (!tooltip) {
+            return;
+        }
+
+        tooltip.textContent = folderName;
+
+        var rect = tile.getBoundingClientRect();
+        var x = rect.left + window.pageXOffset + 8;
+        var y = rect.top + window.pageYOffset + 8;
+
+        tooltip.style.left = x + 'px';
+        tooltip.style.top = y + 'px';
+        tooltip.classList.add('is-visible');
+        tooltip.setAttribute('aria-hidden', 'false');
+    }
+
+    function bindBadgeTooltipEvents() {
+        if (!cornerIndicatorEnabled || !badgeTooltipEnabled || badgeTooltipEventsBound) {
+            return;
+        }
+
+        ensureBadgeTooltipEl();
+        badgeTooltipEventsBound = true;
+
+        $(document).on('mouseenter.bwMfBadgeTooltip', '.attachments-browser .attachment.bw-mf-marked', function () {
+            showBadgeTooltipForTile(this);
+        });
+
+        $(document).on('mousemove.bwMfBadgeTooltip', '.attachments-browser .attachment.bw-mf-marked', function () {
+            showBadgeTooltipForTile(this);
+        });
+
+        $(document).on('mouseleave.bwMfBadgeTooltip', '.attachments-browser .attachment.bw-mf-marked', function () {
+            hideBadgeTooltip();
+        });
+    }
+
+    function getQueryUrl(folderId, unassigned) {
+        var url = new URL(window.location.href);
+        url.searchParams.delete('bw_media_folder');
+        url.searchParams.delete('bw_media_unassigned');
+
+        if (unassigned) {
+            url.searchParams.set('bw_media_unassigned', '1');
+        } else if (folderId > 0) {
+            url.searchParams.set('bw_media_folder', String(folderId));
+        }
+
+        return url.toString();
+    }
+
+    function applyGridFilter(folderId, unassigned) {
+        if (state.mode !== 'grid' || !window.wp || !wp.media || !wp.media.frame) {
+            return false;
+        }
+
+        try {
+            var frame = wp.media.frame;
+            if (!frame.content || !frame.content.get) {
+                return false;
+            }
+
+            var content = frame.content.get();
+            if (!content || !content.collection || !content.collection.props || typeof content.collection.props.set !== 'function') {
+                return false;
+            }
+
+            var collection = content.collection;
+            var nextProps = {
+                bw_media_folder: folderId > 0 ? String(folderId) : '',
+                bw_media_unassigned: unassigned ? '1' : '',
+                ignore: (+new Date())
+            };
+
+            collection.props.set(nextProps);
+            if (typeof collection.reset === 'function') {
+                collection.reset();
+            }
+            if (typeof collection.more === 'function') {
+                collection.more();
+            }
+
+            bindQuickTypeFilterObserver();
+            scheduleBwMfRefresh('apply-grid-filter');
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function nodeHtml(item, depth) {
+        var pad = Math.max(0, depth) * 14;
+        var pinnedClass = item.pinned ? ' is-pinned' : '';
+        var active = (!state.activeUnassigned && state.activeFolder === item.id) ? ' is-active' : '';
+        var isCollapsed = !!folderCollapsedMap[item.id];
+        var hasChildren = !!(folderByParentMap[item.id] && folderByParentMap[item.id].length);
+        var styles = ['padding-left:' + pad + 'px'];
+        var iconColor = item.icon_color ? String(item.icon_color) : '';
+        var iconColorAttr = '';
+        var pinnedAttr = item.pinned ? '1' : '0';
+        var collapsedAttr = isCollapsed ? '1' : '0';
+        var pinIndicator = '<span class="bw-mf-pin bw-mf-pin-indicator" aria-hidden="true">' + (item.pinned ? '📌' : '') + '</span>';
+        var chevron = hasChildren
+            ? '<button class="bw-mf-chevron" type="button" aria-label="Toggle folder" aria-expanded="' + (isCollapsed ? 'false' : 'true') + '">▶</button>'
+            : '';
+
+        if (iconColor) {
+            styles.push('--bw-mf-icon-color:' + iconColor);
+            iconColorAttr = ' data-icon-color="' + iconColor + '"';
+        }
+
+        return '' +
+            '<div class="bw-media-folder-node' + pinnedClass + active + (hasChildren ? ' is-parent' : '') + (isCollapsed ? ' is-collapsed' : '') + '" data-id="' + item.id + '" data-term-id="' + item.id + '" data-folder-id="' + item.id + '" data-parent="' + item.parent + '" data-pinned="' + pinnedAttr + '" data-collapsed="' + collapsedAttr + '"' + iconColorAttr + ' style="' + styles.join(';') + '">' +
+            '  <div class="bw-media-folder-node__main" role="button" tabindex="0">' +
+            '    <span class="bw-mf-left">' +
+            chevron +
+            '      <span class="bw-mf-folder-icon" aria-hidden="true">' +
+            '        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true">' +
+            '          <path fill="currentColor" d="M5.5 5 H9.8 A1.6 1.6 0 0 1 11 5.6 L12.2 7 A1.6 1.6 0 0 0 13.4 7.6 H18.5 A1.5 1.5 0 0 1 20 9.1 V18.5 A1.5 1.5 0 0 1 18.5 20 H5.5 A1.5 1.5 0 0 1 4 18.5 V6.5 A1.5 1.5 0 0 1 5.5 5 Z"></path>' +
+            '        </svg>' +
+            '      </span>' +
+            '      <span class="bw-media-folder-node__name bw-mf-folder-name">' + item.name + '</span>' +
+            '    </span>' +
+            '    <span class="bw-mf-right">' +
+            pinIndicator +
+            '      <span class="bw-media-folder-node__count bw-mf-count">' + item.count + '</span>' +
+            '      <button class="bw-mf-folder-pencil bw-mf-folder-rename-btn" type="button" aria-label="Folder actions">' +
+            '          <span class="dashicons dashicons-edit" aria-hidden="true"></span>' +
+            '      </button>' +
+            '    </span>' +
+            '  </div>' +
+            '  <div class="bw-media-folder-node__actions bw-media-folder-node__actions--hidden" aria-hidden="true">' +
+            '    <button type="button" class="bw-mf-action" data-action="rename">R</button>' +
+            '    <button type="button" class="bw-mf-action" data-action="pin">' + (item.pinned ? 'U' : 'P') + '</button>' +
+            '    <button type="button" class="bw-mf-action" data-action="color">C</button>' +
+            '    <button type="button" class="bw-mf-action bw-mf-action--danger" data-action="delete">X</button>' +
+            '  </div>' +
+            '</div>';
+    }
+
+    function renderContextMenu() {
+        if ($('#bw-mf-context-menu').length) {
+            return;
+        }
+
+        var html = '' +
+            '<div id="bw-mf-context-menu" class="bw-mf-context-menu" role="menu" aria-hidden="true">' +
+            '  <button type="button" class="bw-mf-context-menu__item" data-cmd="rename"><span class="dashicons dashicons-edit" aria-hidden="true"></span><span>Rename</span></button>' +
+            '  <button type="button" class="bw-mf-context-menu__item" data-cmd="new-subfolder"><span class="dashicons dashicons-category" aria-hidden="true"></span><span>New Subfolder</span></button>' +
+            '  <button type="button" class="bw-mf-context-menu__item" data-cmd="pin"><span class="dashicons dashicons-sticky" aria-hidden="true"></span><span>Pin / Unpin</span></button>' +
+            '  <button type="button" class="bw-mf-context-menu__item" data-cmd="color"><span class="dashicons dashicons-art" aria-hidden="true"></span><span>Icon Color</span></button>' +
+            '  <button type="button" class="bw-mf-context-menu__item bw-mf-context-menu__item--danger" data-cmd="delete"><span class="dashicons dashicons-trash" aria-hidden="true"></span><span>Delete</span></button>' +
+            '</div>';
+
+        $('body').append(html);
+    }
+
+    function renderColorPopover() {
+        if ($('#bw-mf-color-popover').length) {
+            return;
+        }
+
+        var html = '' +
+            '<div id="bw-mf-color-popover" class="bw-mf-color-popover" aria-hidden="true">' +
+            '  <input type="color" id="bw-mf-color-input" value="#9aa0a6" />' +
+            '  <button type="button" class="button button-small" id="bw-mf-color-reset">Reset</button>' +
+            '</div>';
+
+        $('body').append(html);
+    }
+
+    function hideContextMenu() {
+        $('#bw-mf-context-menu').removeClass('is-open').attr('aria-hidden', 'true');
+        contextMenuTargetId = 0;
+        contextMenuRowRef = null;
+    }
+
+    function hideColorPopover() {
+        $('#bw-mf-color-popover').removeClass('is-open').attr('aria-hidden', 'true');
+        colorPopoverRowRef = null;
+        if (colorSaveTimer) {
+            window.clearTimeout(colorSaveTimer);
+            colorSaveTimer = null;
+        }
+    }
+
+    function bwMfOpenFolderMenu(config) {
+        var cfgMenu = config || {};
+        var menu = $('#bw-mf-context-menu');
+        var rowEl = cfgMenu.rowEl || null;
+        var anchorEl = cfgMenu.anchorEl || null;
+        var clientX = typeof cfgMenu.clientX === 'number' ? cfgMenu.clientX : null;
+        var clientY = typeof cfgMenu.clientY === 'number' ? cfgMenu.clientY : null;
+        var termId = rowEl ? parseInt($(rowEl).attr('data-id') || '0', 10) : 0;
+
+        if (!menu.length || !rowEl || !(termId > 0)) {
+            hideContextMenu();
+            return;
+        }
+
+        hideColorPopover();
+
+        contextMenuTargetId = termId;
+        contextMenuRowRef = rowEl;
+
+        var left = 0;
+        var top = 0;
+        var rect = null;
+        var menuWidth = 0;
+        var menuHeight = 0;
+
+        menu.addClass('is-open').attr('aria-hidden', 'false').css({
+            left: '0px',
+            top: '0px',
+            visibility: 'hidden'
+        });
+        menuWidth = menu.outerWidth() || 0;
+        menuHeight = menu.outerHeight() || 0;
+
+        if (anchorEl && typeof anchorEl.getBoundingClientRect === 'function') {
+            rect = anchorEl.getBoundingClientRect();
+            left = rect.right + window.pageXOffset - menuWidth;
+            top = rect.bottom + window.pageYOffset + 6;
+        } else {
+            left = (clientX !== null ? clientX : 0) + window.pageXOffset;
+            top = (clientY !== null ? clientY : 0) + window.pageYOffset;
+        }
+
+        contextMenuOpenTick = true;
+        var viewportLeft = window.pageXOffset;
+        var viewportTop = window.pageYOffset;
+        var viewportRight = viewportLeft + window.innerWidth;
+        var viewportBottom = viewportTop + window.innerHeight;
+
+        left = Math.max(viewportLeft + 10, Math.min(left, viewportRight - menuWidth - 10));
+        top = Math.max(viewportTop + 10, Math.min(top, viewportBottom - menuHeight - 10));
+
+        menu.css({
+            left: left + 'px',
+            top: top + 'px',
+            visibility: 'visible'
+        });
+
+        window.requestAnimationFrame(function () {
+            contextMenuOpenTick = false;
+        });
+    }
+
+    function bwMfResolveActionButtons(rowEl) {
+        if (!rowEl || !rowEl.querySelectorAll) {
+            return {};
+        }
+
+        var byData = {
+            rename: rowEl.querySelector('[data-action="rename"]'),
+            pin: rowEl.querySelector('[data-action="pin"], [data-action="up"], [data-action="sticky"]'),
+            color: rowEl.querySelector('[data-action="color"]'),
+            del: rowEl.querySelector('[data-action="delete"]')
+        };
+
+        var btns = Array.from(rowEl.querySelectorAll('button, a'));
+        var byText = {
+            rename: btns.find(function (b) { return ((b.textContent || '').trim() === 'R'); }),
+            pin: btns.find(function (b) {
+                var t = (b.textContent || '').trim();
+                return t === 'U' || t === 'P';
+            }),
+            color: btns.find(function (b) { return ((b.textContent || '').trim() === 'C'); }),
+            del: btns.find(function (b) { return ((b.textContent || '').trim() === 'X'); })
+        };
+
+        var resolved = $.extend({}, byText);
+        Object.keys(byData).forEach(function (key) {
+            if (byData[key]) {
+                resolved[key] = byData[key];
+            }
+        });
+
+        return resolved;
+    }
+
+    function updateRowPinnedState(rowEl, pinned) {
+        if (!rowEl) {
+            return;
+        }
+
+        var isPinned = !!pinned;
+        rowEl.setAttribute('data-pinned', isPinned ? '1' : '0');
+        rowEl.classList.toggle('is-pinned', isPinned);
+
+        var indicator = rowEl.querySelector('.bw-mf-pin');
+        if (indicator) {
+            indicator.textContent = isPinned ? '📌' : '';
+        }
+    }
+
+    function bwMfTriggerActionButton(button, label) {
+        if (!button || typeof button.dispatchEvent !== 'function') {
+            if (window.BW_MF_DEBUG) {
+                console.warn('[BW_MF_DEBUG] missing folder action button:', label);
+            }
+            return false;
+        }
+
+        button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        return true;
+    }
+
+    function setRowIconColor(rowEl, color) {
+        if (!rowEl || !rowEl.style) {
+            return;
+        }
+
+        if (color) {
+            rowEl.style.setProperty('--bw-mf-icon-color', color);
+            rowEl.setAttribute('data-icon-color', color);
+            return;
+        }
+
+        rowEl.style.removeProperty('--bw-mf-icon-color');
+        rowEl.removeAttribute('data-icon-color');
+    }
+
+    function openColorPopover(rowEl, anchorEl) {
+        var pop = $('#bw-mf-color-popover');
+        if (!rowEl || !anchorEl || !pop.length) {
+            return;
+        }
+
+        colorPopoverRowRef = rowEl;
+        var current = rowEl.getAttribute('data-icon-color') || '#9aa0a6';
+        $('#bw-mf-color-input').val(current);
+
+        var rect = anchorEl.getBoundingClientRect();
+        pop.addClass('is-open').attr('aria-hidden', 'false').css({
+            left: '0px',
+            top: '0px',
+            visibility: 'hidden'
+        });
+
+        var popWidth = pop.outerWidth() || 0;
+        var popHeight = pop.outerHeight() || 0;
+        var left = rect.right + window.pageXOffset - popWidth;
+        var top = rect.bottom + window.pageYOffset + 6;
+
+        var viewportLeft = window.pageXOffset;
+        var viewportTop = window.pageYOffset;
+        var viewportRight = viewportLeft + window.innerWidth;
+        var viewportBottom = viewportTop + window.innerHeight;
+
+        left = Math.max(viewportLeft + 10, Math.min(left, viewportRight - popWidth - 10));
+        top = Math.max(viewportTop + 10, Math.min(top, viewportBottom - popHeight - 10));
+
+        pop.css({
+            left: left + 'px',
+            top: top + 'px',
+            visibility: 'visible'
+        });
+    }
+
+    function promptRenameFolder(termId) {
+        var folder = findFolder(termId);
+        if (!folder || termId <= 0) {
+            return;
+        }
+
+        var newName = window.prompt(cfg.text && cfg.text.renamePrompt ? cfg.text.renamePrompt : 'Rename folder', folder.name);
+        if (!newName) {
+            return;
+        }
+
+        request('bw_media_rename_folder', { term_id: termId, name: newName }, refreshTree);
+    }
+
+    function renderDefaults() {
+        var html = '';
+        var allClass = (!state.activeFolder && !state.activeUnassigned) ? ' is-active' : '';
+        var unClass = state.activeUnassigned ? ' is-active' : '';
+        var allLabel = isMediaPostType() ? 'All Files' : 'All Items';
+        var unassignedLabel = isMediaPostType() ? 'Unassigned Files' : 'Unassigned Items';
+
+        html += '<button type="button" class="bw-media-default' + allClass + '" data-type="all">' + allLabel + ' <span>' + (state.counts.all || 0) + '</span></button>';
+        html += '<button type="button" class="bw-media-default bw-media-default--drop' + unClass + '" data-type="unassigned" data-term-id="0" data-folder-id="0">' + unassignedLabel + ' <span>' + (state.counts.unassigned || 0) + '</span></button>';
+
+        $('#bw-media-folders-defaults').html(html);
+    }
+
+    function loadCollapsedState() {
+        folderCollapsedMap = {};
+        try {
+            var raw = window.localStorage.getItem(FOLDER_COLLAPSED_KEY);
+            if (!raw) {
+                return;
+            }
+
+            var parsed = JSON.parse(raw);
+            if (!parsed || typeof parsed !== 'object') {
+                return;
+            }
+
+            Object.keys(parsed).forEach(function (key) {
+                if (parsed[key]) {
+                    var id = parseInt(key, 10);
+                    if (id > 0) {
+                        folderCollapsedMap[id] = true;
+                    }
+                }
+            });
+        } catch (e) {
+            folderCollapsedMap = {};
+        }
+    }
+
+    function saveCollapsedState() {
+        try {
+            window.localStorage.setItem(FOLDER_COLLAPSED_KEY, JSON.stringify(folderCollapsedMap));
+        } catch (e) {
+            // ignore storage errors
+        }
+    }
+
+    function toggleFolderCollapsed(termId) {
+        if (!(termId > 0)) {
+            return;
+        }
+        if (folderCollapsedMap[termId]) {
+            delete folderCollapsedMap[termId];
+        } else {
+            folderCollapsedMap[termId] = true;
+        }
+        saveCollapsedState();
+        syncTreeNodeVisibility();
+    }
+
+    function buildTreeRows() {
+        var byParent = {};
+
+        state.folders.forEach(function (item) {
+            var p = item.parent || 0;
+            if (!byParent[p]) {
+                byParent[p] = [];
+            }
+            byParent[p].push(item);
+        });
+        folderByParentMap = byParent;
+
+        function walk(parent, depth, out) {
+            var children = byParent[parent] || [];
+            children.forEach(function (child) {
+                out.push(nodeHtml(child, depth));
+                walk(child.id, depth + 1, out);
+            });
+        }
+
+        var rows = [];
+        walk(0, 0, rows);
+        return rows;
+    }
+
+    function syncTreeNodeVisibility() {
+        var searchTerm = ($('#bw-mr-folder-search').val() || '').toLowerCase().trim();
+        var nodes = Array.prototype.slice.call(document.querySelectorAll('#bw-media-folders-tree .bw-media-folder-node'));
+        var nodeById = {};
+        nodes.forEach(function (node) {
+            var id = parseInt(node.getAttribute('data-id') || '0', 10);
+            if (id > 0) {
+                nodeById[id] = node;
+            }
+        });
+
+        nodes.forEach(function (node) {
+            var id = parseInt(node.getAttribute('data-id') || '0', 10);
+            var parentId = parseInt(node.getAttribute('data-parent') || '0', 10);
+            var matchesSearch = !searchTerm || ((node.querySelector('.bw-media-folder-node__name') && node.querySelector('.bw-media-folder-node__name').textContent || '').toLowerCase().indexOf(searchTerm) !== -1);
+
+            var hiddenByCollapse = false;
+            var currentParent = parentId;
+            while (currentParent > 0) {
+                if (folderCollapsedMap[currentParent]) {
+                    hiddenByCollapse = true;
+                    break;
+                }
+
+                var parentNode = nodeById[currentParent];
+                if (!parentNode) {
+                    break;
+                }
+                currentParent = parseInt(parentNode.getAttribute('data-parent') || '0', 10);
+            }
+
+            node.style.display = matchesSearch ? '' : 'none';
+            node.classList.toggle('bw-mf-hidden-by-collapse', !!hiddenByCollapse);
+            node.classList.toggle('is-collapsed', !!folderCollapsedMap[id]);
+
+            var chevron = node.querySelector('.bw-mf-chevron');
+            if (chevron) {
+                chevron.setAttribute('aria-expanded', folderCollapsedMap[id] ? 'false' : 'true');
+                chevron.classList.toggle('is-collapsed', !!folderCollapsedMap[id]);
+            }
+        });
+    }
+
+    function renderTree() {
+        $('#bw-media-folders-tree').html(buildTreeRows().join(''));
+
+        var options = ['<option value="0">Unassigned</option>'];
+        state.folders.forEach(function (item) {
+            options.push('<option value="' + item.id + '">' + item.name + '</option>');
+        });
+        $('#bw-media-folders-bulk-select').html(options.join(''));
+
+        syncTreeNodeVisibility();
+        bindDropTargets();
+        debugAssertFolderRowLayout();
+    }
+
+    function debugAssertFolderRowLayout() {
+        if (!window.BW_MF_DEBUG) {
+            return;
+        }
+
+        var nodes = document.querySelectorAll('#bw-media-folders-tree .bw-media-folder-node');
+        Array.prototype.forEach.call(nodes, function (node) {
+            var main = node.querySelector('.bw-media-folder-node__main');
+            var left = node.querySelector('.bw-mf-left');
+            var right = node.querySelector('.bw-mf-right');
+            if (!main || !left || !right) {
+                console.warn('[BW_MF_DEBUG] invalid row structure', node);
+                return;
+            }
+
+            var styles = window.getComputedStyle(main);
+            if (styles.justifyContent === 'space-between') {
+                console.warn('[BW_MF_DEBUG] invalid main justify-content', node);
+            }
+        });
+    }
+
+    function refreshTree() {
+        request('bw_media_get_folders_tree', {}, function (data) {
+            state.folders = Array.isArray(data.folders) ? data.folders : [];
+            state.counts = data.counts || { all: 0, unassigned: 0 };
+            renderDefaults();
+            renderTree();
+            scheduleBwMfRefresh('refresh-tree');
+        });
+    }
+
+    function findFolder(id) {
+        return state.folders.find(function (item) {
+            return item.id === id;
+        });
+    }
+
+    function applySearchFilter() {
+        syncTreeNodeVisibility();
+    }
+
+    function collectSelectedObjectIds() {
+        var ids = [];
+
+        $('.wp-list-table .check-column input[type="checkbox"]:checked').each(function () {
+            var row = $(this).closest('tr');
+            var idAttr = row.attr('id') || '';
+            var id = parseInt(idAttr.replace('post-', ''), 10);
+            if (id > 0) {
+                ids.push(id);
+            }
+        });
+
+        $('.attachments .attachment.selected').each(function () {
+            var id = parseInt($(this).attr('data-id') || '0', 10);
+            if (id > 0) {
+                ids.push(id);
+            }
+        });
+
+        if (window.wp && wp.media && wp.media.frame && wp.media.frame.state) {
+            try {
+                var selection = wp.media.frame.state().get('selection');
+                if (selection && typeof selection.each === 'function') {
+                    selection.each(function (model) {
+                        var modelId = parseInt(model && model.get ? model.get('id') : 0, 10);
+                        if (modelId > 0) {
+                            ids.push(modelId);
+                        }
+                    });
+                }
+            } catch (e) {
+                // fail-open: fallback to DOM selected nodes only
+            }
+        }
+
+        return Array.from(new Set(ids));
+    }
+
+    function refreshMediaView() {
+        if (state.mode === 'grid' && window.wp && wp.media && wp.media.frame) {
+            try {
+                var frame = wp.media.frame;
+                if (frame.content && frame.content.get) {
+                    var browser = frame.content.get();
+                    if (browser && browser.collection && typeof browser.collection.props === 'function') {
+                        browser.collection.props.set({
+                            bw_media_folder: state.activeFolder > 0 ? state.activeFolder : undefined,
+                            bw_media_unassigned: state.activeUnassigned ? '1' : undefined
+                        });
+                        browser.collection.more();
+                        scheduleBwMfRefresh('refresh-media-view');
+                        return;
+                    }
+                }
+            } catch (e) {
+                // fallback below
+            }
+        }
+
+        window.location.reload();
+    }
+
+    function assignFolder(folderId, ids, onDone) {
+        request('bw_media_assign_folder', {
+            term_id: folderId,
+            attachment_ids: ids
+        }, function (data) {
+            var assignedIds = Array.isArray(data && data.assigned_ids) ? data.assigned_ids : [];
+            var duplicateIds = Array.isArray(data && data.duplicate_ids) ? data.duplicate_ids : [];
+            var changedIds = assignedIds.length ? assignedIds : ids;
+
+            if (Array.isArray(changedIds)) {
+                changedIds.forEach(function (id) {
+                    var parsed = parseInt(id, 10);
+                    if (parsed > 0) {
+                        markerCache.delete(parsed);
+                        markerFailedIds.delete(parsed);
+                    }
+                });
+            }
+
+            if (assignedIds.length) {
+                refreshTree();
+                if (typeof onDone === 'function') {
+                    onDone();
+                }
+                scheduleBwMfRefresh('assign-folder');
+            }
+
+            if (duplicateIds.length && data && data.message) {
+                showDuplicateNotice(data.message);
+            }
+        });
+    }
+
+    function makeGridTilesDraggable() {
+        $('.attachments-browser .attachment').attr('draggable', 'true');
+        $('.attachments-browser .attachment img').attr('draggable', 'false');
+    }
+
+    function makeListRowsDraggable() {
+        if (isMediaPostType()) {
+            $('.wp-list-table tbody tr').attr('draggable', 'true');
+            return;
+        }
+
+        $('.wp-list-table tbody tr').attr('draggable', 'false');
+        $('.bw-mf-row-drag-handle').attr('draggable', 'true');
+    }
+
+    function bindInternalDragSuppression() {
+        if (document.__bwMfDragSuppressionBound) {
+            return;
+        }
+
+        document.__bwMfDragSuppressionBound = true;
+
+        function isFolderTarget(target) {
+            return !!(target && target.closest && target.closest('#bw-media-folders-root'));
+        }
+
+        function suppressUploaderHijack(event) {
+            if (!isInternalDragActive()) {
+                return;
+            }
+
+            if (event.type === 'dragover') {
+                var hoverNode = event.target && event.target.closest ? event.target.closest(FOLDER_NODE_SEL) : null;
+                setCurrentHoverNode(hoverNode);
+                if (window.BW_MF_DEBUG && hoverNode) {
+                    console.log('[BW_MF_DEBUG] hover node', hoverNode.getAttribute('data-term-id') || '');
+                }
+            }
+
+            if (event.type === 'drop') {
+                setInternalDrag(false);
+                clearDropHover();
+            }
+
+            event.preventDefault();
+            if (event.type === 'dragenter' || event.type === 'dragover') {
+                if (event.dataTransfer) {
+                    try {
+                        event.dataTransfer.dropEffect = 'move';
+                    } catch (err) {}
+                }
+                event.stopImmediatePropagation();
+                return;
+            }
+
+            if (!isFolderTarget(event.target)) {
+                event.stopImmediatePropagation();
+            }
+        }
+
+        document.addEventListener('dragenter', suppressUploaderHijack, true);
+        document.addEventListener('dragover', suppressUploaderHijack, true);
+        document.addEventListener('drop', suppressUploaderHijack, true);
+    }
+
+    function readDraggedIdsFromDataTransfer(event) {
+        var result = [];
+        var transfer = event && event.originalEvent ? event.originalEvent.dataTransfer : null;
+        var raw = transfer && typeof transfer.getData === 'function' ? transfer.getData('text/plain') : '';
+
+        if (raw) {
+            raw.split(',').forEach(function (chunk) {
+                var id = parseInt(String(chunk).trim(), 10);
+                if (id > 0) {
+                    result.push(id);
+                }
+            });
+        }
+
+        if (!result.length && draggedIds.length) {
+            result = draggedIds.slice();
+        }
+
+        return Array.from(new Set(result));
+    }
+
+    function collectDragIdsForElement($el) {
+        if (!isMediaPostType()) {
+            var singleId = parseInt($el.attr('data-post-id') || '0', 10);
+            return singleId > 0 ? [singleId] : [];
+        }
+
+        var id = parseInt($el.attr('data-id') || (($el.attr('id') || '').replace('post-', '')) || '0', 10);
+        if (!(id > 0)) {
+            return [];
+        }
+
+        var selected = collectSelectedObjectIds();
+        if (selected.indexOf(id) !== -1 && selected.length > 1) {
+            return selected;
+        }
+
+        return [id];
+    }
+
+    function bindDropTargets() {
+        makeGridTilesDraggable();
+        makeListRowsDraggable();
+
+        $('#bw-media-folders-tree .bw-media-folder-node, #bw-media-folders-defaults .bw-media-default--drop')
+            .off('.bwMfDnD')
+            .on('dragenter.bwMfDnD', function (e) {
+                e.preventDefault();
+                if (e.originalEvent && e.originalEvent.dataTransfer) {
+                    try {
+                        e.originalEvent.dataTransfer.dropEffect = 'move';
+                    } catch (err) {}
+                }
+            })
+            .on('dragover.bwMfDnD', function (e) {
+                e.preventDefault();
+                if (e.originalEvent && e.originalEvent.dataTransfer) {
+                    try {
+                        e.originalEvent.dataTransfer.dropEffect = 'move';
+                    } catch (err) {}
+                }
+            }).on('drop.bwMfDnD', function (e) {
+                e.preventDefault();
+                clearDropHover();
+                setInternalDrag(false);
+                destroyDragBadge();
+
+                var folderId = parseInt($(this).attr('data-term-id') || $(this).attr('data-folder-id') || $(this).attr('data-id') || '0', 10);
+                var ids = readDraggedIdsFromDataTransfer(e);
+                if (!ids.length) {
+                    debugLog('drop ignored: no draggable ids');
+                    return;
+                }
+
+                debugLog('drop assign request', { folderId: folderId, ids: ids });
+                assignFolder(folderId, ids, function () {
+                    refreshMediaView();
+                });
+            });
+
+        $(document)
+            .off('dragstart.bwMfDnDGrid', '.attachments-browser .attachment')
+            .on('dragstart.bwMfDnDGrid', '.attachments-browser .attachment', function (e) {
+                var ids = collectDragIdsForElement($(this));
+                if (!ids.length) {
+                    draggedIds = [];
+                    setInternalDrag(false);
+                    return;
+                }
+
+                draggedIds = ids.slice();
+                setInternalDrag(true);
+                if (e.originalEvent && e.originalEvent.dataTransfer) {
+                    try {
+                        e.originalEvent.dataTransfer.effectAllowed = 'move';
+                    } catch (err) {}
+                    e.originalEvent.dataTransfer.setData('text/plain', ids.join(','));
+                }
+                setupDragBadge(e, ids.length);
+                debugLog('grid dragstart', { ids: ids });
+            });
+
+        $(document)
+            .off('dragstart.bwMfDnDList', '.wp-list-table tbody tr')
+            .on('dragstart.bwMfDnDList', '.wp-list-table tbody tr', function (e) {
+                if (!isMediaPostType()) {
+                    return;
+                }
+                var ids = collectDragIdsForElement($(this));
+                if (!ids.length) {
+                    draggedIds = [];
+                    setInternalDrag(false);
+                    return;
+                }
+
+                draggedIds = ids.slice();
+                setInternalDrag(true);
+                if (e.originalEvent && e.originalEvent.dataTransfer) {
+                    try {
+                        e.originalEvent.dataTransfer.effectAllowed = 'move';
+                    } catch (err) {}
+                    e.originalEvent.dataTransfer.setData('text/plain', ids.join(','));
+                }
+                setupDragBadge(e, ids.length);
+                debugLog('list dragstart', { ids: ids });
+            });
+
+        $(document)
+            .off('dragstart.bwMfDnDHandle', '.bw-mf-row-drag-handle')
+            .on('dragstart.bwMfDnDHandle', '.bw-mf-row-drag-handle', function (e) {
+                if (isMediaPostType()) {
+                    return;
+                }
+
+                var ids = collectDragIdsForElement($(this));
+                if (!ids.length) {
+                    draggedIds = [];
+                    setInternalDrag(false);
+                    return;
+                }
+
+                var dragTitle = String($(this).attr('data-drag-title') || '').trim();
+                if (!dragTitle) {
+                    dragTitle = 'Item';
+                }
+                var dragLabel = '↕ ' + dragTitle;
+
+                draggedIds = [ids[0]];
+                setInternalDrag(true);
+                if (e.originalEvent && e.originalEvent.dataTransfer) {
+                    try {
+                        e.originalEvent.dataTransfer.effectAllowed = 'move';
+                    } catch (err) {}
+                    e.originalEvent.dataTransfer.setData('text/plain', String(ids[0]));
+                }
+                setupDragBadge(e, 1, dragLabel);
+                debugLog('handle dragstart', { ids: draggedIds, title: dragTitle });
+            });
+
+        $(document)
+            .off('dragend.bwMfDnDCleanup', '.attachments-browser .attachment, .wp-list-table tbody tr, .bw-mf-row-drag-handle')
+            .on('dragend.bwMfDnDCleanup', '.attachments-browser .attachment, .wp-list-table tbody tr, .bw-mf-row-drag-handle', function () {
+                draggedIds = [];
+                setInternalDrag(false);
+                clearDropHover();
+                destroyDragBadge();
+            }
+        );
+
+        $(document)
+            .off('mousedown.bwMfDnDImage', '.attachments-browser .attachment')
+            .on('mousedown.bwMfDnDImage', '.attachments-browser .attachment', function () {
+                $(this).attr('draggable', 'true');
+                $(this).find('img').attr('draggable', 'false');
+            });
+    }
+
+    function registerGridAjaxFilter() {
+        if (!isMediaPostType()) {
+            return;
+        }
+
+        if (window.__BW_MF_PREFILTER_DONE) {
+            return;
+        }
+        window.__BW_MF_PREFILTER_DONE = true;
+
+        $.ajaxPrefilter(function (options) {
+            if (typeof options.data !== 'string' || typeof options.url !== 'string' || options.url.indexOf('admin-ajax.php') === -1) {
+                return;
+            }
+
+            if (options.data.indexOf('action=query-attachments') === -1) {
+                return;
+            }
+
+            if (state.activeUnassigned) {
+                if (options.data.indexOf('query%5Bbw_media_unassigned%5D=1') === -1) {
+                    options.data += '&query%5Bbw_media_unassigned%5D=1';
+                }
+            } else if (state.activeFolder > 0) {
+                var encodedFolder = 'query%5Bbw_media_folder%5D=' + encodeURIComponent(String(state.activeFolder));
+                if (options.data.indexOf('query%5Bbw_media_folder%5D=') === -1) {
+                    options.data += '&' + encodedFolder;
+                }
+            }
+        });
+    }
+
+    function setCollapsedState(collapsed) {
+        var body = $('body');
+        body.toggleClass('bw-mf-collapsed', collapsed);
+
+        $('#bw-media-folders-toggle')
+            .attr('aria-expanded', collapsed ? 'false' : 'true')
+            .text(collapsed ? 'Expand' : 'Collapse');
+
+        $('#bw-mf-collapse-tab')
+            .attr('aria-expanded', collapsed ? 'false' : 'true')
+            .text('Open Folders');
+
+        try {
+            window.localStorage.setItem('bw_mf_collapsed', collapsed ? '1' : '0');
+        } catch (e) {
+            // ignore storage errors
+        }
+    }
+
+    function bindEvents() {
+        if (eventsBound) {
+            return;
+        }
+        eventsBound = true;
+
+        root().on('click', '#bw-media-folders-toggle', function () {
+            var collapsed = !$('body').hasClass('bw-mf-collapsed');
+            setCollapsedState(collapsed);
+        });
+
+        $(document).on('click', '#bw-mf-collapse-tab', function () {
+            setCollapsedState(false);
+        });
+
+        root().on('click', '#bw-mr-new-folder-btn', function () {
+            var name = window.prompt(cfg.text && cfg.text.newFolderPrompt ? cfg.text.newFolderPrompt : 'Folder name');
+            if (!name) {
+                return;
+            }
+
+            request('bw_media_create_folder', { name: name, parent: 0 }, refreshTree);
+        });
+
+        root().on('input', '#bw-mr-folder-search', applySearchFilter);
+
+        root().on('click', '.bw-mf-chevron', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+
+            var row = $(this).closest('.bw-media-folder-node');
+            var termId = parseInt(row.attr('data-term-id') || row.attr('data-id') || '0', 10);
+            toggleFolderCollapsed(termId);
+        });
+
+        root().on('click', '.bw-media-default', function () {
+            var type = $(this).attr('data-type');
+            if (type === 'unassigned') {
+                state.activeFolder = 0;
+                state.activeUnassigned = true;
+                if (applyGridFilter(0, true)) {
+                    renderDefaults();
+                    renderTree();
+                    return;
+                }
+                window.location.href = getQueryUrl(0, true);
+                return;
+            }
+
+            state.activeFolder = 0;
+            state.activeUnassigned = false;
+            if (applyGridFilter(0, false)) {
+                renderDefaults();
+                renderTree();
+                return;
+            }
+            window.location.href = getQueryUrl(0, false);
+        });
+
+        root().on('click', '.bw-media-folder-node__main', function (e) {
+            if ($(e.target).closest('.bw-mf-chevron').length) {
+                return;
+            }
+            if ($(e.target).closest('.bw-mf-folder-pencil').length) {
+                return;
+            }
+            var folderId = parseInt($(this).closest('.bw-media-folder-node').attr('data-term-id') || $(this).closest('.bw-media-folder-node').attr('data-id') || '0', 10);
+            state.activeFolder = folderId > 0 ? folderId : 0;
+            state.activeUnassigned = false;
+            if (applyGridFilter(state.activeFolder, false)) {
+                renderDefaults();
+                renderTree();
+                return;
+            }
+            window.location.href = getQueryUrl(folderId, false);
+        });
+
+        root().on('keydown', '.bw-media-folder-node__main', function (e) {
+            if (e.key !== 'Enter' && e.key !== ' ') {
+                return;
+            }
+            e.preventDefault();
+            $(this).trigger('click');
+        });
+
+        root().on('contextmenu', '.bw-media-folder-node', function (e) {
+            e.preventDefault();
+            bwMfOpenFolderMenu({
+                rowEl: this,
+                clientX: e.clientX,
+                clientY: e.clientY
+            });
+        });
+
+        $(document).on('click', function (e) {
+            if (contextMenuOpenTick) {
+                return;
+            }
+            if ($(e.target).closest('#bw-mf-context-menu').length) {
+                return;
+            }
+            if ($(e.target).closest('#bw-mf-color-popover').length) {
+                return;
+            }
+            if ($(e.target).closest('.bw-mf-folder-pencil, .bw-mf-folder-rename-btn').length) {
+                return;
+            }
+            hideContextMenu();
+            hideColorPopover();
+        });
+
+        $(document).on('click', '.bw-mf-copy-link-btn', function (e) {
+            var button = e.currentTarget;
+            var url = button ? String(button.getAttribute('data-copy-url') || '').trim() : '';
+            var copiedLabel = cfg.text && cfg.text.copiedLink ? cfg.text.copiedLink : 'Copied';
+            var copyLabel = cfg.text && cfg.text.copyLink ? cfg.text.copyLink : 'Copy link';
+            var copyFailedLabel = cfg.text && cfg.text.copyFailed ? cfg.text.copyFailed : 'Copy failed';
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            if (!url) {
+                window.alert(copyFailedLabel);
+                return;
+            }
+
+            copyTextToClipboard(url)
+                .then(function () {
+                    var $button = $(button);
+                    window.clearTimeout($button.data('bwMfCopyResetTimer') || 0);
+                    $button.addClass('is-copied')
+                        .attr('aria-label', copiedLabel)
+                        .attr('title', copiedLabel);
+
+                    var resetTimer = window.setTimeout(function () {
+                        $button.removeClass('is-copied')
+                            .attr('aria-label', copyLabel)
+                            .attr('title', copyLabel);
+                        $button.removeData('bwMfCopyResetTimer');
+                    }, 1400);
+
+                    $button.data('bwMfCopyResetTimer', resetTimer);
+                })
+                .catch(function () {
+                    window.alert(copyFailedLabel);
+                });
+        });
+
+        $(window).on('scroll resize', function () {
+            hideContextMenu();
+            hideColorPopover();
+        });
+        $(document).on('keydown', function (e) {
+            if (e.key === 'Escape') {
+                hideContextMenu();
+                hideColorPopover();
+            }
+        });
+
+        $(document).on('click', '#bw-mf-context-menu .bw-mf-context-menu__item', function () {
+            var item = $(this);
+            var cmd = item.attr('data-cmd') || '';
+            var row = contextMenuRowRef ? $(contextMenuRowRef) : $();
+            var termId = row.length ? parseInt(row.attr('data-id') || '0', 10) : 0;
+            var folder = termId > 0 ? findFolder(termId) : null;
+
+            if (!row.length) {
+                hideContextMenu();
+                return;
+            }
+
+            if (cmd === 'new-subfolder') {
+                if (!folder || termId <= 0) {
+                    hideContextMenu();
+                    return;
+                }
+
+                var promptText = cfg.text && cfg.text.createSubPrompt ? cfg.text.createSubPrompt : 'Subfolder name';
+                var subName = window.prompt(promptText);
+                if (!subName) {
+                    hideContextMenu();
+                    return;
+                }
+
+                request('bw_media_create_folder', {
+                    name: subName,
+                    parent: termId
+                }, refreshTree);
+
+                hideContextMenu();
+                return;
+            }
+
+            if (cmd === 'pin') {
+                if (!folder || !row.length) {
+                    hideContextMenu();
+                    return;
+                }
+
+                var nextPin = row.attr('data-pinned') === '1' ? 0 : 1;
+                request('bw_mf_toggle_folder_pin', {
+                    term_id: termId,
+                    pinned: nextPin
+                }, refreshTree, { silent: true });
+
+                folder.pinned = nextPin ? 1 : 0;
+                updateRowPinnedState(row.get(0), nextPin);
+                state.folders.sort(function (a, b) {
+                    if (a.parent !== b.parent) {
+                        return 0;
+                    }
+                    if ((a.pinned ? 1 : 0) !== (b.pinned ? 1 : 0)) {
+                        return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
+                    }
+                    return String(a.name || '').localeCompare(String(b.name || ''));
+                });
+                renderTree();
+                hideContextMenu();
+                return;
+            }
+
+            var actions = bwMfResolveActionButtons(row.get(0));
+            var actionButton = null;
+            if (cmd === 'rename') {
+                actionButton = actions.rename || null;
+            } else if (cmd === 'pin') {
+                actionButton = actions.pin || null;
+            } else if (cmd === 'color') {
+                hideContextMenu();
+                openColorPopover(row.get(0), row.find('.bw-mf-folder-pencil, .bw-mf-folder-rename-btn').get(0));
+                return;
+            } else if (cmd === 'delete') {
+                actionButton = actions.del || null;
+            }
+
+            if (!actionButton) {
+                hideContextMenu();
+                return;
+            }
+
+            bwMfTriggerActionButton(actionButton, cmd);
+            hideContextMenu();
+        });
+
+        $(document).on('input change', '#bw-mf-color-input', function () {
+            var rowEl = colorPopoverRowRef;
+            var color = String($(this).val() || '');
+            var termId = rowEl ? parseInt($(rowEl).attr('data-id') || '0', 10) : 0;
+            if (!(termId > 0) || !color) {
+                return;
+            }
+
+            setRowIconColor(rowEl, color);
+            if (colorSaveTimer) {
+                window.clearTimeout(colorSaveTimer);
+            }
+            colorSaveTimer = window.setTimeout(function () {
+                request('bw_mf_set_folder_color', { term_id: termId, color: color }, function (data) {
+                    var applied = data && data.color ? String(data.color) : color;
+                    setRowIconColor(rowEl, applied);
+                }, { silent: true });
+            }, 180);
+        });
+
+        $(document).on('click', '#bw-mf-color-reset', function (e) {
+            e.preventDefault();
+            var rowEl = colorPopoverRowRef;
+            var termId = rowEl ? parseInt($(rowEl).attr('data-id') || '0', 10) : 0;
+            if (!(termId > 0)) {
+                hideColorPopover();
+                return;
+            }
+
+            request('bw_mf_reset_folder_color', { term_id: termId }, function () {
+                setRowIconColor(rowEl, '');
+                hideColorPopover();
+            }, { silent: true });
+        });
+
+        root().on('click', '.bw-mf-folder-pencil, .bw-mf-folder-rename-btn', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            var row = $(this).closest('.bw-media-folder-node[data-term-id]');
+            if (!row.length) {
+                return;
+            }
+
+            bwMfOpenFolderMenu({
+                rowEl: row.get(0),
+                anchorEl: this
+            });
+        });
+
+        root().on('click', '.bw-mf-action', function (e) {
+            e.stopPropagation();
+            var node = $(this).closest('.bw-media-folder-node');
+            var termId = parseInt(node.attr('data-id') || '0', 10);
+            var action = $(this).attr('data-action');
+            var folder = findFolder(termId);
+
+            if (!folder || termId <= 0) {
+                return;
+            }
+
+            if (action === 'rename') {
+                promptRenameFolder(termId);
+                return;
+            }
+
+            if (action === 'delete') {
+                if (window.confirm(cfg.text && cfg.text.confirmDelete ? cfg.text.confirmDelete : 'Delete this folder?')) {
+                    request('bw_media_delete_folder', { term_id: termId }, function () {
+                        if (state.activeFolder === termId) {
+                            window.location.href = getQueryUrl(0, false);
+                            return;
+                        }
+                        refreshTree();
+                    });
+                }
+                return;
+            }
+
+            if (action === 'pin') {
+                var nextPin = folder.pinned ? 0 : 1;
+                request('bw_media_update_folder_meta', {
+                    term_id: termId,
+                    pinned: nextPin,
+                    color: folder.color || '',
+                    sort: folder.sort || 0
+                }, refreshTree);
+                return;
+            }
+
+            if (action === 'color') {
+                var color = window.prompt('Folder color (hex)', folder.color || '#6b7280');
+                if (color) {
+                    request('bw_media_update_folder_meta', {
+                        term_id: termId,
+                        pinned: folder.pinned ? 1 : 0,
+                        color: color,
+                        sort: folder.sort || 0
+                    }, refreshTree);
+                }
+            }
+        });
+
+        root().on('click', '#bw-media-folders-bulk-btn', function () {
+            var ids = collectSelectedObjectIds();
+            if (!ids.length) {
+                window.alert(cfg.text && cfg.text.selectItems ? cfg.text.selectItems : 'Select at least one item.');
+                return;
+            }
+
+            var folderId = parseInt($('#bw-media-folders-bulk-select').val() || '0', 10);
+            assignFolder(folderId, ids, function () {
+                refreshMediaView();
+            });
+        });
+    }
+
+    function mountLayout() {
+        var body = $('body');
+        var rootEl = root();
+        if (!rootEl.length) {
+            return;
+        }
+
+        if (!body.hasClass('bw-mf-enabled')) {
+            body.addClass('bw-mf-enabled');
+        }
+
+        var target = $('#wpbody-content');
+        if (target.length && !rootEl.parent().is(target)) {
+            rootEl.prependTo(target);
+        }
+
+        // Woo product list has a fixed top header that can overlap the sidebar.
+        if (body.hasClass('post-type-product')) {
+            var topOffset = 32;
+            var wooHeader = document.querySelector('.woocommerce-layout__header, .woocommerce-layout-header');
+            if (wooHeader) {
+                var rect = wooHeader.getBoundingClientRect();
+                if (rect && rect.bottom > 32) {
+                    topOffset = Math.ceil(rect.bottom);
+                }
+            }
+            document.body.style.setProperty('--bw-mf-top-offset', topOffset + 'px');
+        } else {
+            document.body.style.setProperty('--bw-mf-top-offset', '32px');
+        }
+    }
+
+    function init() {
+        if (window.__BW_MF_INIT_DONE) {
+            return;
+        }
+        window.__BW_MF_INIT_DONE = true;
+
+        if (!isSupportedListScreen()) {
+            return;
+        }
+
+        mountLayout();
+        ensureDuplicateNotice();
+        loadCollapsedState();
+        renderContextMenu();
+        renderColorPopover();
+        makeGridTilesDraggable();
+        makeListRowsDraggable();
+        bindInternalDragSuppression();
+
+        var collapsed = false;
+        try {
+            if (window.localStorage.getItem('bw_mf_collapsed') === '1') {
+                collapsed = true;
+            }
+        } catch (e) {
+            // ignore storage errors
+        }
+
+        setCollapsedState(collapsed);
+        bindEvents();
+        bindBadgeTooltipEvents();
+        if (isMediaPostType()) {
+            bindQuickTypeFilterEvents();
+            bindQuickTypeLayoutObserver();
+            registerGridAjaxFilter();
+        }
+        refreshTree();
+        bindCornerMarkerObserver();
+        if (isMediaPostType()) {
+            bindQuickTypeFilterObserver();
+            ensureTypeFiltersPlacement();
+        }
+        scheduleBwMfRefresh('init');
+    }
+
+    $(init);
+
+    document.addEventListener('DOMContentLoaded', function () {
+        if (!isMediaPostType() || !cornerIndicatorEnabled) {
+            clearCornerMarkers();
+        } else {
+            window.setTimeout(function () {
+                scheduleBwMfRefresh('dom-ready-corner');
+            }, 500);
+        }
+        if (isMediaPostType()) {
+            window.setTimeout(function () {
+                bindQuickTypeFilterObserver();
+                bindQuickTypeLayoutObserver();
+                scheduleBwMfRefresh('dom-ready-types');
+            }, 350);
+        }
+    });
+})(jQuery);

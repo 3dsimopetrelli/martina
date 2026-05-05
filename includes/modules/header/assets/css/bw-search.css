@@ -1,0 +1,646 @@
+/* BW Search Button */
+.bw-header-search {
+    width: max-content !important;
+    max-width: 100%;
+    flex: 0 0 auto !important;
+}
+
+.bw-search-button {
+    --bw-search-button-bg: #80fd03;
+    --bw-search-button-bg-hover: var(--bw-search-button-bg);
+    --bw-search-button-border-color: #080808;
+    --bw-search-button-border-color-hover: var(--bw-search-button-border-color);
+    --bw-search-button-border-width: 1px;
+    --bw-search-button-border-radius: 999px;
+    --bw-search-button-padding-top: 10px;
+    --bw-search-button-padding-right: 24px;
+    --bw-search-button-padding-bottom: 10px;
+    --bw-search-button-padding-left: 24px;
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #080808;
+    font-size: 20px;
+    font-weight: 500;
+    line-height: 1;
+    cursor: pointer;
+    background: none !important;
+    border: none !important;
+    padding: 0 !important;
+    transition: all 0.3s ease;
+}
+
+.bw-search-button:hover,
+.bw-search-button:focus {
+    outline: none;
+}
+
+.bw-search-button__label {
+    color: inherit;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--bw-search-button-bg);
+    border: var(--bw-search-button-border-width) solid var(--bw-search-button-border-color);
+    border-radius: var(--bw-search-button-border-radius);
+    padding: var(--bw-search-button-padding-top) var(--bw-search-button-padding-right) var(--bw-search-button-padding-bottom) var(--bw-search-button-padding-left);
+    transition: all 0.3s ease;
+}
+
+.bw-search-button__icon {
+    color: inherit;
+    line-height: 1;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--bw-search-button-bg);
+    border: var(--bw-search-button-border-width) solid var(--bw-search-button-border-color);
+    border-radius: var(--bw-search-button-border-radius);
+    padding: var(--bw-search-button-padding-top) var(--bw-search-button-padding-right) var(--bw-search-button-padding-bottom) var(--bw-search-button-padding-left);
+    transition: all 0.3s ease;
+}
+
+.bw-search-button__icon svg {
+    width: 1em;
+    height: 1em;
+    display: block;
+}
+
+.bw-search-button__icon-image {
+    width: 1em;
+    height: 1em;
+    display: block;
+    object-fit: contain;
+}
+
+.bw-search-button__icon svg,
+.bw-search-button__icon svg * {
+    fill: none;
+    stroke: currentColor;
+}
+
+.bw-search-button:hover .bw-search-button__label,
+.bw-search-button:focus .bw-search-button__label,
+.bw-search-button:hover .bw-search-button__icon,
+.bw-search-button:focus .bw-search-button__icon {
+    background-color: var(--bw-search-button-bg-hover);
+    border-color: var(--bw-search-button-border-color-hover);
+}
+
+/* BW Search Overlay */
+/*
+ * L'overlay viene automaticamente spostato nel body via JavaScript
+ * per garantire che non sia vincolato da contenitori parent (es. navigation)
+ * e possa sempre aprirsi in fullscreen.
+ */
+.bw-search-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.04);
+    backdrop-filter: blur(4px) saturate(1.5);
+    -webkit-backdrop-filter: blur(4px) saturate(1.5);
+    z-index: 99999;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.28s ease, visibility 0s 0.28s;
+    overflow-y: auto;
+}
+
+.bw-search-overlay.is-active {
+    opacity: 1;
+    visibility: visible;
+    transition: opacity 0.28s ease, visibility 0s 0s;
+}
+
+.bw-search-overlay__container {
+    position: relative;
+    width: min(980px, calc(100vw - 72px));
+    min-height: min(720px, calc(100dvh - 72px));
+    margin: 36px auto;
+    padding: 28px 28px 30px;
+    box-sizing: border-box;
+    background:
+        radial-gradient(circle at top left, rgba(255, 255, 255, 0.05), transparent 34%),
+        linear-gradient(180deg, rgba(24, 24, 24, 0.88) 0%, rgba(11, 11, 11, 0.92) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 24px;
+    box-shadow: 0 32px 80px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.24);
+    overflow: hidden;
+    opacity: 0;
+    transform: translateY(-56px);
+    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease;
+    transition-delay: 0s;
+}
+
+.bw-search-overlay.is-active .bw-search-overlay__container {
+    opacity: 1;
+    transform: translateY(0);
+    transition-delay: 0.03s;
+}
+
+/* Close Button */
+.bw-search-overlay__close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    background: rgba(255, 255, 255, 0.04) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: opacity 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
+    color: rgba(255, 255, 255, 0.82);
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+.bw-search-overlay__close:hover {
+    opacity: 1;
+    color: #ffffff !important;
+    transform: translateY(-1px);
+    background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.bw-search-overlay__close:hover svg,
+.bw-search-overlay__close:hover svg * {
+    stroke: #ffffff !important;
+}
+
+.bw-search-overlay__close:focus {
+    outline: none;
+}
+
+.bw-search-overlay__close:focus-visible {
+    outline: 2px solid rgba(128, 253, 3, 0.95) !important;
+    outline-offset: 3px !important;
+    box-shadow: 0 0 0 3px rgba(8, 8, 8, 0.32) !important;
+}
+
+.bw-search-overlay__close svg {
+    display: none;
+}
+
+.bw-search-overlay__close::before {
+    content: "";
+    width: 18px;
+    height: 18px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 6 6 18'/%3E%3Cpath d='m6 6 12 12'/%3E%3C/svg%3E");
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+}
+
+/* Content */
+.bw-search-overlay__content {
+    max-width: 760px;
+    margin: 0 auto;
+    padding-top: 64px;
+}
+
+.bw-search-overlay .bw-search-overlay__title,
+body .bw-search-overlay .bw-search-overlay__title,
+.elementor .bw-search-overlay .bw-search-overlay__title,
+body.elementor-page .bw-search-overlay .bw-search-overlay__title {
+    font-size: clamp(22px, 3.6cqw, 48px);
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.5) !important;
+    margin: 0 0 22px 0;
+    text-align: center;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+}
+
+/* Input Section */
+.bw-search-overlay__form {
+    /* No margin, content flows naturally */
+}
+
+.bw-search-overlay__input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    min-height: 52px;
+    padding: 0 18px 0 42px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    box-shadow: inset 0 0 0 1px rgba(8, 8, 8, 0.32);
+}
+
+.bw-search-overlay__input-wrapper::before {
+    content: "";
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    width: 16px;
+    height: 16px;
+    transform: translateY(-50%);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.55)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E");
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    pointer-events: none;
+}
+
+.bw-search-overlay__input-wrapper::after {
+    content: attr(data-placeholder);
+    position: absolute;
+    left: 38px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 15px;
+    line-height: 1;
+    color: rgba(255, 255, 255, 0.34);
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+
+.bw-search-overlay__input-wrapper:focus-within::after,
+.bw-search-overlay__input-wrapper:has(.bw-search-overlay__input.has-content)::after {
+    opacity: 0;
+}
+
+.bw-search-overlay__input {
+    width: 100%;
+    font-size: clamp(18px, 2.4vw, 24px);
+    font-weight: 400;
+    color: #ffffff;
+    background: none;
+    border: none;
+    outline: none;
+    /* Padding removed - now controlled via widget settings only */
+    /* Default padding: 12px 0 12px 0 is set in the widget control */
+    line-height: 1.4;
+    font-family: inherit;
+    position: relative;
+    z-index: 1;
+}
+
+.bw-search-overlay__input::placeholder {
+    color: transparent;
+}
+
+.bw-search-overlay__input:focus {
+    outline: none;
+}
+
+.bw-search-overlay__input::-webkit-search-decoration,
+.bw-search-overlay__input::-webkit-search-cancel-button,
+.bw-search-overlay__input::-webkit-search-results-button,
+.bw-search-overlay__input::-webkit-search-results-decoration {
+    -webkit-appearance: none;
+}
+
+.bw-search-overlay__input::-webkit-search-cancel-button {
+    width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    background-color: rgba(255, 255, 255, 0.06);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-opacity='0.72' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 6 6 18'/%3E%3Cpath d='m6 6 12 12'/%3E%3C/svg%3E");
+    background-size: 14px 14px;
+    background-repeat: no-repeat;
+    background-position: center;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    cursor: pointer;
+}
+
+/* Override WooCommerce input borders - ensures only plugin border is visible */
+.bw-search-overlay__input[type="search"],
+.woocommerce .bw-search-overlay__input[type="search"],
+.woocommerce-page .bw-search-overlay__input[type="search"],
+body .bw-search-overlay__input[type="search"] {
+    border: none !important;
+    box-shadow: none !important;
+}
+
+/* Hint Text */
+.bw-search-overlay__hint {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.56);
+    margin: 12px 6px 18px 6px;
+    text-align: left;
+    line-height: 1.5;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+    .bw-search-overlay__close {
+        top: 16px;
+        right: 14px;
+    }
+
+    .bw-search-overlay__content {
+        max-width: 100%;
+        padding-top: 64px;
+    }
+
+    .bw-search-overlay__title {
+        font-size: clamp(20px, 5.8vw, 34px);
+        margin-bottom: 24px;
+        line-height: 1.12;
+        letter-spacing: -0.03em;
+    }
+
+    .bw-search-overlay__container {
+        width: calc(100vw - 24px);
+        min-height: calc(100dvh - 24px);
+        margin: 12px auto;
+        padding: 20px 14px 18px;
+    }
+
+    .bw-search-overlay__input-wrapper {
+        min-height: 50px;
+        padding-left: 40px;
+    }
+
+    .bw-search-overlay__input-wrapper::after {
+        font-size: 14px;
+    }
+}
+
+@media (max-width: 480px) {
+    .bw-search-overlay__title {
+        font-size: clamp(18px, 5.6vw, 28px);
+    }
+}
+
+/* Prevent body scroll when overlay is active */
+body.bw-search-overlay-active {
+    overflow: hidden;
+}
+
+/* Category Filters */
+.bw-search-overlay__filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 24px;
+    justify-content: center;
+}
+
+.bw-category-filter {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 20px;
+    font-size: 16px;
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.86);
+    background-color: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    line-height: 1.4;
+    font-family: inherit;
+}
+
+.bw-category-filter:hover {
+    opacity: 0.8;
+}
+
+.bw-category-filter.is-active {
+    color: #000000;
+    background-color: #80fd03;
+    border-color: #111111;
+}
+
+.bw-category-filter:focus {
+    outline: 2px solid rgba(128, 253, 3, 0.5);
+    outline-offset: 2px;
+}
+
+/* Ensure caret is always visible */
+.bw-search-overlay__input {
+    caret-color: auto;
+}
+
+/* Responsive for filters */
+@media (max-width: 1024px) {
+    .bw-search-overlay__filters {
+        margin-top: 20px;
+        gap: 6px;
+    }
+
+    .bw-category-filter {
+        padding: 8px 16px;
+        font-size: 14px;
+    }
+}
+
+/* ==========================================================================
+   Live Search Results - Masonry Layout
+   ========================================================================== */
+
+/* Results Container */
+.bw-search-results {
+    margin-top: 20px;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(20px);
+    transition: opacity 0.4s ease, transform 0.4s ease, visibility 0s 0.4s;
+}
+
+.bw-search-results.is-visible {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+    transition: opacity 0.4s ease, transform 0.4s ease, visibility 0s 0s;
+}
+
+/* Results Grid - Masonry Layout (4 colonne) */
+.bw-search-results__grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    width: 100%;
+}
+
+/* Product Card
+   Scoped to the search overlay so shared product-card classes used by
+   product grids / wallpost layouts are not polluted by search-specific UI. */
+.bw-search-results .bw-product-card {
+    background-color: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    overflow: hidden;
+    animation: fadeInUp 0.5s ease forwards;
+    opacity: 0;
+    break-inside: avoid;
+    box-shadow: inset 0 0 0 1px rgba(8, 8, 8, 0.28);
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Product Card Link */
+.bw-search-results .bw-product-card__link {
+    display: block;
+    height: 100%;
+    text-decoration: none;
+    color: inherit;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.bw-search-results .bw-product-card:hover .bw-product-card__link {
+    transform: translateY(-1px);
+}
+
+/* Product Image */
+.bw-search-results .bw-product-card__image {
+    position: relative;
+    width: 100%;
+    padding-bottom: 100%; /* 1:1 Aspect Ratio */
+    overflow: hidden;
+    background-color: rgba(255, 255, 255, 0.06);
+}
+
+.bw-search-results .bw-product-card__image img {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* Product Info */
+.bw-search-results .bw-product-card__info {
+    padding: 12px 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* Product Title */
+.bw-search-results .bw-product-card__title {
+    font-size: 15px;
+    font-weight: 500;
+    color: #ffffff;
+    margin: 0;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Product Price */
+.bw-search-results .bw-product-card__price {
+    font-size: 16px;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.bw-search-results .bw-product-card__price .amount {
+    color: #ffffff;
+}
+
+.bw-search-results .bw-product-card__price del {
+    opacity: 0.48;
+    margin-right: 8px;
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.44);
+}
+
+.bw-search-results .bw-product-card__price ins {
+    text-decoration: none;
+    color: #80fd03;
+}
+
+/* Results Message */
+.bw-search-results__message {
+    text-align: center;
+    padding: 40px 20px;
+    font-size: 18px;
+    color: rgba(255, 255, 255, 0.62);
+    display: none;
+}
+
+/* Loading Spinner */
+.bw-search-results__loading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 40px;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0s 0.3s;
+}
+
+.bw-search-results__loading.is-visible {
+    opacity: 1;
+    visibility: visible;
+    transition: opacity 0.3s ease, visibility 0s 0s;
+}
+
+.bw-search-loading-spinner {
+    width: 50px;
+    height: 50px;
+    border: 4px solid rgba(255, 255, 255, 0.12);
+    border-top-color: #80fd03;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Responsive - Mobile */
+@media (max-width: 1024px) {
+    .bw-search-results {
+        margin-top: 18px;
+    }
+
+    .bw-search-results__grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+    }
+
+    .bw-search-results .bw-product-card__info {
+        padding: 10px 10px 12px;
+    }
+
+    .bw-search-results .bw-product-card__title {
+        font-size: 14px;
+    }
+
+    .bw-search-results .bw-product-card__price {
+        font-size: 16px;
+    }
+
+    .bw-search-results__message {
+        font-size: 16px;
+        padding: 30px 20px;
+    }
+}
+
+/* Responsive - Molto piccolo (1 colonna) */
+@media (max-width: 480px) {
+    .bw-search-results__grid {
+        grid-template-columns: 1fr;
+    }
+}
