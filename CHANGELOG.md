@@ -1,0 +1,60 @@
+# Changelog
+
+## Unreleased
+- Trust Box / Price Variation: extracted the lower trust stack out of `BW-SP Price Variation` into the new `BW Trust Box` widget, with dedicated trust-box assets, retained global Reviews Settings trust authority, and Elementor panel SP-family styling for the new widget card.
+- Related Products: added `Layout > Show Overlay Actions on Tablet & Mobile` with default tablet/mobile state off, implemented as a widget-local overlay suppression below `1025px` without changing the shared product-card contract.
+- Cart Popup: fixed discount rows going stale after quantity change when a percentage coupon is applied — `update_quantity` and `remove_item` responses now include full coupon data via shared `bw_cart_popup_build_totals_data()` helper; `_patchTotals()` now delegates to `updateTotals()` which rebuilds coupon rows.
+- Cart Popup: apply coupon error now returns the real WooCommerce reason (minimum spend, usage limit, product restriction) instead of always showing "Coupon code invalid or expired."
+- Cart Popup: item removed from DOM immediately when quantity reaches 0 and cart is not empty — animated collapse without waiting for next panel open.
+- Cart Popup: `variation_id` now included in item data, fixing `hasCartVariation()` and `markButtonsAlreadyInCart()` for variable products.
+- Cart Popup: eliminated double AJAX on page load when floating trigger is enabled — single `loadCartContents()` call feeds new `_markButtonsFromCache()` method.
+- Cart Popup: `showErrorModal()` sets message via `.text()` instead of HTML template literal interpolation (XSS hardening).
+- Cart Popup: removed dead `.bw-cart-popup-vat` selector; `updateTotals()` now syncs `this.appliedCoupons` from server response.
+- Cart Popup: `bw_cart_popup_get_cart_contents` enforces POST method, consistent with all other handlers.
+- Price Variation / Sticky Sidebar: hardened sticky behavior for dynamic license-accordion height changes, popup/body-lock layout shifts, and viewport restore events by refreshing sticky geometry, placeholder sizing, and layout context during accordion transitions, ResizeObserver updates, body/html mutations, and visual viewport changes.
+- Product Details: extended the existing widget and Product Details metabox with a new `Compatibility` content type powered by product-level checkbox selections, with default-all behavior for untouched products and no parallel data system.
+- Product Details: aligned the `Product Details` branch title contract so `Collection Content` is now the default heading, and removed the duplicated `Collection content` subtitle above the assets hero row.
+- Price Variation: `Show More Payment Options` now also enables the official `WooCommerce PayPal Payments` single-product button above the text shortcut, using a synchronized WooCommerce-compatible variation form bridge instead of a custom PayPal flow.
+- Price Variation: added widget-level `Review Trust` on/off toggles for the global review slider and fixed review box, so each widget instance can suppress those global trust blocks without changing Reviews Settings authority.
+- Price Variation: added a governed trust stack below the main pricing box with shared-Embla review slider support, global fixed review summary box support from `Reviews Settings -> Trust Content`, widget-level digital product info cards, and widget-level FAQ CTA controls.
+- Docs: aligned `BW-SP Price Variation` documentation with current runtime reality, clarifying compact reviews-as-trust usage, variation-bound license disclosure accordion behavior, single-axis selector constraints, and current `More payment options` render gating.
+- Product Grid: redesigned the mobile filter trigger as a bordered white pill with green icon shell, moved mobile first-paint filter visibility into CSS to prevent desktop-filter flash on reload, and added `Disable Hover Actions on Tablet & Mobile` in `Layout`.
+- Title Product: added `Big Text`-style responsive title sizing controls (`Max Text Width`, `Fixed/Fluid` mode, fluid min/max sizes and viewport bounds) and changed the default title weight to `500`.
+- Product Card: aligned shared default typography baseline to title `14px`, description `14px`, and price `12px`, with Product Slider defaults realigned to the same contract when no Elementor typography override is present.
+- Showcase Slide: CTA arrow now renders a dedicated chevron SVG, and `Style > Link Button` now exposes responsive typography for the green CTA text pill.
+- Showcase Slide: added breakpoint-level fixed frame ratios (`3:2`, `4:3`, `1:1`, `16:9`), curated `Classic Photo (3:2)` size presets (`Balanced`, `Large`, `XL Peek`), and universal `Start Offset Left` viewport spacing for first-card breathing room.
+- Product Grid: `Desktop Columns` now supports `5` and `6`, and `Style > Text` now exposes content gap plus title/description/price color, typography, and padding controls.
+- Mosaic Slider: hardened image loading and first reveal by promoting only the active viewport primary images, demoting hidden fallback markup to lazy, and waiting for the first image decode-ready state before reveal.
+- Header: added `Hero Overlap` mode with page targeting, dedicated admin tab, fixed-overlay startup, transparent wrapper, and reuse of the existing dark-zone detection for white-on-dark hero starts.
+- Header: hardened `Hero Overlap` boot and visuals by fixing empty admin tabs, removing first-paint jump, enabling mobile glass from overlay start, syncing mobile icon dark-zone color behavior with the logo, keeping desktop `Search` text black on the green pill, and removing the temporary glass border.
+- Header: responsive icon controls now support inline `SVG code` for mobile hamburger, search, and cart icons; inline SVG takes precedence over uploaded media attachments.
+- Header: mobile navigation redesigned as a cart-popup-style glass card with simplified reveal, bottom `Login or Join` CTA, and legal footer row for `Privacy Policy` / `Terms Policy`.
+- Hero Slide: added new `BW-UI Hero Slide` Elementor widget with static-first hero rendering, responsive height/max-width controls, background image layer, and future-ready `Slide` mode surface.
+- Hero Slide: title sanitization now allows inline `style` on `<span>`, so custom underline treatments entered in Elementor WYSIWYG render correctly on the frontend.
+- Mosaic Slider: added new `BW-UI Mosaic Slider` Elementor widget with desktop 5-item asymmetric mosaic pages, mobile linear Embla fallback, and shared `BW_Product_Card_Component` reuse for product results.
+- Price Variation: removed "Other Payment Methods" section entirely (controls, style section, render block, JS toggle handler, CSS).
+- Price Variation: removed "Open Cart Popup" control — cart popup always opens on add-to-cart via AJAX handler; control was unused.
+- Price Variation: fixed dead-code bug in `get_default_variation()` — bare `return;` prevented fallback to first variation; now correctly falls back to `$variations_data[0]` when no in-stock variation exists.
+- Static Showcase: lazy-load fade-in for all three images (main + gallery) via `loading="lazy"` + CSS opacity transition + JS `is-loaded` class.
+- Static Showcase: switched to `wp_get_attachment_image()` for full srcset/sizes support on attachment-based images.
+- Static Showcase: batched all `get_post_meta()` calls into a single DB read per render.
+- Static Showcase: draft/private products now visible in Elementor editor context.
+- Static Showcase: extracted duplicate placeholder HTML into `render_placeholder()`.
+- Static Showcase: removed aggressive `margin: 0; padding: 0` wildcard reset inside container; removed redundant `object-fit: cover` from gallery image CSS (set by inline style).
+- Static Showcase: registered `bw-static-showcase-script` JS handle; widget declares it via `get_script_depends()`.
+- BW Presentation Slide: custom cursor redesigned to fixed glassmorphism (single on/off toggle; 10+ configuration controls removed).
+- BW Presentation Slide: fixed orphaned popup overlay in `<body>` on Elementor widget destroy/re-render.
+- BW Presentation Slide: fixed `TypeError: Cannot read properties of undefined (reading 'removeClass')` — selector cache now assigned before `emblaCore.init()`.
+- BW Presentation Slide: fixed system cursor hidden over arrow buttons when custom cursor is active.
+- BW Presentation Slide: dead code removal, selector caching, breakpoint sort/break refactor, CSS specificity cleanup (three audit waves).
+- Docs: created `docs/30-features/presentation-slide/` with feature README, fixes index, and hardening report.
+- Docs: final cleanup pass (templates moved, auth consolidated, checkout docs normalized).
+- Product Grid: race condition fix (abort stale subcategory/tag AJAX requests).
+- Product Grid: PHP→data-attr→JS pipeline for render settings (image_size, image_mode, hover_effect, open_cart_popup).
+- Product Grid: rate limiting extended to authenticated users (300/300/200 req/min, keyed by user ID).
+- Product Grid: `destroyWidgetState()` function + MutationObserver for full state cleanup on re-render and editor deletion.
+- Product Grid: documented `is-loading` vs `is-loading-visible` coupling.
+- Docs: added `docs/30-features/product-grid/` with architecture map and hardening report.
+
+## 2026-02-26
+- Full documentation refactor and consolidation into `docs/`.
