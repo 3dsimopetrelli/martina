@@ -1,0 +1,264 @@
+<?php
+/**
+ * Edit account form
+ *
+ * @package WooCommerce/Templates
+ * @version 7.8.0
+ */
+
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
+$customer_id   = get_current_user_id();
+$customer      = wp_get_current_user();
+$current_email = $customer instanceof WP_User ? (string) $customer->user_email : '';
+$pending_email = get_user_meta( $customer_id, 'bw_supabase_pending_email', true );
+$countries     = new WC_Countries();
+$billing_country  = get_user_meta( $customer_id, 'billing_country', true );
+$shipping_country = get_user_meta( $customer_id, 'shipping_country', true );
+$billing_country  = $billing_country ? $billing_country : $countries->get_base_country();
+$shipping_country = $shipping_country ? $shipping_country : $countries->get_base_country();
+$billing_fields   = $countries->get_address_fields( $billing_country, 'billing_' );
+$shipping_fields  = $countries->get_address_fields( $shipping_country, 'shipping_' );
+
+$has_shipping = false;
+foreach ( $shipping_fields as $shipping_key => $shipping_field ) {
+    $value = get_user_meta( $customer_id, $shipping_key, true );
+    if ( '' !== $value && null !== $value ) {
+        $has_shipping = true;
+        break;
+    }
+}
+$ship_to_billing = ! $has_shipping;
+
+/**
+ * Hook: woocommerce_before_edit_account_form.
+ */
+$before_form_output = '';
+
+if ( has_action( 'woocommerce_before_edit_account_form' ) ) {
+    ob_start();
+    do_action( 'woocommerce_before_edit_account_form' );
+    $before_form_output = (string) ob_get_clean();
+
+    $account_details_heading = wp_kses_post( __( 'Account details', 'woocommerce' ) );
+    $heading_pattern         = '/<h[1-6][^>]*>\s*' . preg_quote( $account_details_heading, '/' ) . '\s*<\/h[1-6]>/i';
+
+    if ( $before_form_output ) {
+        $before_form_output = preg_replace( $heading_pattern, '', $before_form_output );
+        echo $before_form_output; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+    }
+}
+?>
+<div class="bw-settings">
+    <header class="bw-page-header">
+        <h2><?php esc_html_e( 'Settings', 'bw' ); ?></h2>
+        <div class="bw-tab-switcher" role="tablist">
+            <button class="bw-tab is-active" type="button" data-target="#bw-tab-profile" aria-selected="true"><?php esc_html_e( 'Profile', 'bw' ); ?></button>
+            <button class="bw-tab" type="button" data-target="#bw-tab-billing" aria-selected="false"><?php esc_html_e( 'Billing Details', 'bw' ); ?></button>
+            <button class="bw-tab" type="button" data-target="#bw-tab-shipping" aria-selected="false"><?php esc_html_e( 'Shipping Details', 'bw' ); ?></button>
+            <button class="bw-tab" type="button" data-target="#bw-tab-security" aria-selected="false"><?php esc_html_e( 'Security', 'bw' ); ?></button>
+        </div>
+    </header>
+
+    <?php wc_print_notices(); ?>
+
+    <h2 class="screen-reader-text"><?php esc_html_e( 'Account details', 'woocommerce' ); ?></h2>
+
+    <div class="bw-tab-panels">
+        <div class="bw-tab-panel is-active" id="bw-tab-profile">
+            <form class="woocommerce-EditAccountForm edit-account" action="" method="post">
+                <section class="bw-settings-block">
+                    <h3><?php esc_html_e( 'Profile', 'bw' ); ?></h3>
+                    <div class="bw-grid">
+                        <div class="bw-field">
+                            <label for="bw_profile_first_name"><?php esc_html_e( 'First name', 'woocommerce' ); ?> <span class="required">*</span></label>
+                            <input type="text" name="account_first_name" id="bw_profile_first_name" autocomplete="given-name" value="<?php echo esc_attr( $customer->first_name ); ?>" required />
+                        </div>
+                        <div class="bw-field">
+                            <label for="bw_profile_last_name"><?php esc_html_e( 'Last name', 'woocommerce' ); ?> <span class="required">*</span></label>
+                            <input type="text" name="account_last_name" id="bw_profile_last_name" autocomplete="family-name" value="<?php echo esc_attr( $customer->last_name ); ?>" required />
+                        </div>
+                        <div class="bw-field">
+                            <label for="bw_profile_display_name"><?php esc_html_e( 'Display name', 'woocommerce' ); ?> <span class="required">*</span></label>
+                            <input type="text" name="account_display_name" id="bw_profile_display_name" value="<?php echo esc_attr( $customer->display_name ); ?>" required />
+                            <p class="form-row form-row-wide">
+                                <span class="description"><?php esc_html_e( 'This name is shown in your account and on reviews.', 'bw' ); ?></span>
+                            </p>
+                        </div>
+                    </div>
+                    <p>
+                        <button type="submit" class="button"><?php esc_html_e( 'Save profile', 'bw' ); ?></button>
+                    </p>
+                </section>
+
+                <?php wp_nonce_field( 'bw_save_profile_details', 'bw-profile-details-nonce' ); ?>
+                <input type="hidden" name="bw_account_profile_submit" value="1" />
+            </form>
+        </div>
+
+        <div class="bw-tab-panel" id="bw-tab-billing">
+            <form class="woocommerce-EditAccountForm edit-account" action="" method="post">
+                <section class="bw-settings-block">
+                    <h3><?php esc_html_e( 'Billing details', 'bw' ); ?></h3>
+                    <div class="bw-grid">
+                        <?php foreach ( $billing_fields as $key => $field ) : ?>
+                            <?php $value = get_user_meta( $customer_id, $key, true ); ?>
+                            <div class="bw-field">
+                                <?php woocommerce_form_field( $key, $field, $value ); ?>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                    <p>
+                        <button type="submit" class="button"><?php esc_html_e( 'Save billing details', 'bw' ); ?></button>
+                    </p>
+                </section>
+
+                <?php wp_nonce_field( 'bw_save_profile_details', 'bw-profile-details-nonce' ); ?>
+                <input type="hidden" name="bw_account_billing_submit" value="1" />
+            </form>
+        </div>
+
+        <div class="bw-tab-panel" id="bw-tab-shipping">
+            <form class="woocommerce-EditAccountForm edit-account" action="" method="post">
+                <section class="bw-settings-block">
+                    <h3><?php esc_html_e( 'Shipping details', 'bw' ); ?></h3>
+                    <p class="form-row form-row-wide">
+                        <label for="bw_shipping_same_as_billing">
+                            <input type="checkbox" id="bw_shipping_same_as_billing" name="shipping_same_as_billing" value="1" <?php checked( $ship_to_billing ); ?> />
+                            <?php esc_html_e( 'Shipping address is the same as billing.', 'bw' ); ?>
+                        </label>
+                    </p>
+                    <div class="bw-grid" data-bw-shipping-fields <?php echo $ship_to_billing ? 'hidden' : ''; ?>>
+                        <?php foreach ( $shipping_fields as $key => $field ) : ?>
+                            <?php $value = get_user_meta( $customer_id, $key, true ); ?>
+                            <div class="bw-field">
+                                <?php woocommerce_form_field( $key, $field, $value ); ?>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                    <p>
+                        <button type="submit" class="button"><?php esc_html_e( 'Save shipping details', 'bw' ); ?></button>
+                    </p>
+                </section>
+
+                <?php wp_nonce_field( 'bw_save_profile_details', 'bw-profile-details-nonce' ); ?>
+                <input type="hidden" name="bw_account_shipping_submit" value="1" />
+            </form>
+        </div>
+
+        <div class="bw-tab-panel" id="bw-tab-security">
+            <div class="bw-account-security__notice" role="status" data-bw-pending-email-banner <?php echo $pending_email ? '' : 'hidden'; ?>>
+                <span class="bw-account-security__notice-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M3 6.75C3 5.78 3.78 5 4.75 5h14.5c.97 0 1.75.78 1.75 1.75v10.5c0 .97-.78 1.75-1.75 1.75H4.75A1.75 1.75 0 0 1 3 17.25V6.75Z" stroke="currentColor" stroke-width="1.5"/>
+                        <path d="m4 7 8 6 8-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </span>
+                <div class="bw-account-security__notice-copy">
+                    <p class="bw-account-security__notice-title" data-bw-pending-email-message>
+                        <?php
+                        if ( $pending_email ) {
+                            printf(
+                                /* translators: %s is the pending email address. */
+                                esc_html__( 'Confirm your new email address (%s) from the confirmation email we sent you.', 'bw' ),
+                                esc_html( $pending_email )
+                            );
+                        }
+                        ?>
+                    </p>
+                    <p class="bw-account-security__notice-hint"><?php esc_html_e( 'Check your inbox and click the confirmation link to complete the update.', 'bw' ); ?></p>
+                </div>
+            </div>
+
+            <form class="bw-settings-form" data-bw-supabase-password-form>
+                <section class="bw-settings-block">
+                    <h3><?php esc_html_e( 'Change password', 'bw' ); ?></h3>
+                    <div class="bw-grid">
+                        <div class="bw-field">
+                            <label for="bw_security_password"><?php esc_html_e( 'New password', 'woocommerce' ); ?> <span class="required">*</span></label>
+                            <input type="password" name="new_password" id="bw_security_password" autocomplete="new-password" required />
+                        </div>
+                        <div class="bw-field">
+                            <label for="bw_security_password_confirm"><?php esc_html_e( 'Confirm new password', 'woocommerce' ); ?> <span class="required">*</span></label>
+                            <input type="password" name="confirm_password" id="bw_security_password_confirm" autocomplete="new-password" required />
+                        </div>
+                    </div>
+                    <div class="bw-password-rules" data-bw-password-rules>
+                        <p class="bw-password-rules__title"><?php esc_html_e( 'Password must include:', 'bw' ); ?></p>
+                        <ul class="bw-password-rules__list">
+                            <li class="bw-password-rules__rule" data-bw-password-rule="length"><?php esc_html_e( 'At least 8 characters', 'bw' ); ?></li>
+                            <li class="bw-password-rules__rule" data-bw-password-rule="lowercase"><?php esc_html_e( 'One lowercase letter', 'bw' ); ?></li>
+                            <li class="bw-password-rules__rule" data-bw-password-rule="uppercase"><?php esc_html_e( 'One uppercase letter', 'bw' ); ?></li>
+                            <li class="bw-password-rules__rule" data-bw-password-rule="number"><?php esc_html_e( 'One number', 'bw' ); ?></li>
+                            <li class="bw-password-rules__rule" data-bw-password-rule="symbol"><?php esc_html_e( 'One special character', 'bw' ); ?></li>
+                        </ul>
+                    </div>
+                    <div class="bw-account-form__messages">
+                        <div class="bw-account-form__error" role="alert" aria-live="polite" hidden></div>
+                        <div class="bw-account-form__success" role="status" aria-live="polite" hidden></div>
+                    </div>
+                    <div class="bw-account-security__missing-session" data-bw-supabase-missing-session hidden>
+                        <p><?php esc_html_e( 'Your Supabase session is missing. Please log in again to update your password.', 'bw' ); ?></p>
+                        <a class="button" href="<?php echo esc_url( wp_logout_url( wc_get_page_permalink( 'myaccount' ) ) ); ?>">
+                            <?php esc_html_e( 'Log in again', 'bw' ); ?>
+                        </a>
+                    </div>
+                    <p>
+                        <button type="submit" class="button"><?php esc_html_e( 'Update password', 'bw' ); ?></button>
+                    </p>
+                </section>
+            </form>
+
+            <form class="bw-settings-form" data-bw-supabase-email-form>
+                <section class="bw-settings-block">
+                    <h3><?php esc_html_e( 'Change email', 'bw' ); ?></h3>
+                    <div class="bw-grid">
+                        <div class="bw-field bw-account-security__readonly-field">
+                            <label for="bw_security_current_email"><?php esc_html_e( 'Current email', 'bw' ); ?></label>
+                            <input type="email" id="bw_security_current_email" value="<?php echo esc_attr( $current_email ); ?>" readonly aria-readonly="true" />
+                            <p class="description bw-account-security__readonly-note"><?php esc_html_e( 'This is your current email address.', 'bw' ); ?></p>
+                        </div>
+                    </div>
+                    <p class="bw-account-security__email-intro"><?php esc_html_e( 'If you want to change email, enter and confirm the new address below.', 'bw' ); ?></p>
+                    <div class="bw-grid">
+                        <div class="bw-field">
+                            <label for="bw_security_email"><?php esc_html_e( 'New email address', 'woocommerce' ); ?> <span class="required">*</span></label>
+                            <input type="email" name="email" id="bw_security_email" autocomplete="email" required />
+                        </div>
+                        <div class="bw-field">
+                            <label for="bw_security_email_confirm"><?php esc_html_e( 'Confirm new email address', 'woocommerce' ); ?> <span class="required">*</span></label>
+                            <input type="email" name="confirm_email" id="bw_security_email_confirm" autocomplete="email" required />
+                        </div>
+                    </div>
+                    <div class="bw-account-form__messages">
+                        <div class="bw-account-form__error" role="alert" aria-live="polite" hidden></div>
+                        <div class="bw-account-form__success" role="status" aria-live="polite" hidden></div>
+                        <div class="bw-account-security__email-notice" role="status" aria-live="polite" data-bw-email-confirmation-box hidden>
+                            <span class="bw-account-security__email-notice-icon" aria-hidden="true">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M3 6.75C3 5.78 3.78 5 4.75 5h14.5c.97 0 1.75.78 1.75 1.75v10.5c0 .97-.78 1.75-1.75 1.75H4.75A1.75 1.75 0 0 1 3 17.25V6.75Z" stroke="currentColor" stroke-width="1.5"/>
+                                    <path d="m4 7 8 6 8-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                            </span>
+                            <div class="bw-account-security__email-notice-copy">
+                                <p class="bw-account-security__email-notice-title" data-bw-email-confirmation-message><?php esc_html_e( 'Please confirm your new email address from the email we sent.', 'bw' ); ?></p>
+                                <p class="bw-account-security__email-notice-hint"><?php esc_html_e( 'Check your inbox to complete the change.', 'bw' ); ?></p>
+                            </div>
+                        </div>
+                    </div>
+                    <p>
+                        <button type="submit" class="button"><?php esc_html_e( 'Update email', 'bw' ); ?></button>
+                    </p>
+                </section>
+            </form>
+        </div>
+    </div>
+</div>
+
+<?php
+/**
+ * Hook: woocommerce_after_edit_account_form.
+ */
+do_action( 'woocommerce_after_edit_account_form' );

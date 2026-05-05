@@ -1,0 +1,58 @@
+<?php
+/**
+ * My Account page
+ *
+ * @see https://docs.woocommerce.com/document/template-structure/
+ * @package WooCommerce/Templates
+ * @version 8.9.0
+ */
+
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
+$is_auth_callback = isset( $_GET['bw_auth_callback'] ) && '1' === sanitize_text_field( wp_unslash( $_GET['bw_auth_callback'] ) );
+$auth_type        = isset( $_GET['type'] ) ? sanitize_key( wp_unslash( $_GET['type'] ) ) : '';
+$auth_code        = isset( $_GET['code'] ) ? sanitize_text_field( wp_unslash( $_GET['code'] ) ) : '';
+$is_code_callback = ! empty( $auth_code ) && in_array( $auth_type, [ 'invite', 'recovery' ], true );
+$set_password_qs  = isset( $_GET['bw_set_password'] ) && '1' === sanitize_text_field( wp_unslash( $_GET['bw_set_password'] ) );
+
+if ( ! is_user_logged_in() && ( $is_auth_callback || $is_code_callback || $set_password_qs ) ) {
+    wc_get_template( 'myaccount/auth-callback.php' );
+    return;
+}
+
+// phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped
+wc_print_notices();
+// phpcs:enable
+
+if ( ! is_user_logged_in() && ! is_wc_endpoint_url( 'set-password' ) ) {
+    wc_get_template( 'myaccount/form-login.php', [ 'redirect' => wc_get_page_permalink( 'myaccount' ) ] );
+    return;
+}
+
+if ( is_user_logged_in()
+    && is_wc_endpoint_url( 'set-password' )
+    && function_exists( 'bw_user_needs_onboarding' )
+    && ! bw_user_needs_onboarding( get_current_user_id() )
+) {
+    wp_safe_redirect( wc_get_page_permalink( 'myaccount' ) );
+    exit;
+}
+?>
+<div class="bw-account-layout">
+    <?php $account_title = get_post_field( 'post_title', get_queried_object_id(), 'raw' ); ?>
+    <header class="bw-account-page-header">
+        <h1 class="bw-account-title"><?php echo esc_html( $account_title ); ?></h1>
+    </header>
+
+    <aside class="bw-account-navigation">
+        <?php do_action( 'woocommerce_before_account_navigation' ); ?>
+        <?php wc_get_template( 'myaccount/navigation.php' ); ?>
+        <?php do_action( 'woocommerce_after_account_navigation' ); ?>
+    </aside>
+
+    <div class="bw-account-content" id="bw-account-content">
+        <?php do_action( 'woocommerce_account_content' ); ?>
+    </div>
+</div>
