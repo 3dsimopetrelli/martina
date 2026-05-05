@@ -1,0 +1,165 @@
+/**
+ * BW Animated Banner Widget Styles
+ * Inserito all'interno dello smart-header, sopra la navigazione
+ */
+
+/* Rimuovi qualsiasi proprietà dai wrapper Elementor che interferisce con position: fixed */
+.elementor-widget-bw-animated-banner {
+    position: static !important;
+    transform: none !important;
+    filter: none !important;
+    perspective: none !important;
+    will-change: auto !important;
+    contain: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+.elementor-widget-bw-animated-banner>.elementor-widget-container {
+    position: static !important;
+    transform: none !important;
+    filter: none !important;
+    perspective: none !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* Assicura che la sezione Elementor che contiene il banner non interferisca */
+.elementor-section:has(.bw-animated-banner),
+.elementor-container:has(.bw-animated-banner),
+.elementor-column:has(.bw-animated-banner) {
+    position: static !important;
+    transform: none !important;
+    filter: none !important;
+    perspective: none !important;
+    overflow: visible !important;
+}
+
+/* Fallback per browser che non supportano :has() - applica a tutte le sezioni che hanno il widget */
+.elementor-element.elementor-widget-bw-animated-banner .elementor-widget-wrap,
+.elementor-element.elementor-widget-bw-animated-banner~.elementor-element {
+    transform: none !important;
+}
+
+/* Forza il reset di qualsiasi parent che potrebbe interferire */
+body:not(.elementor-editor-active) .elementor-top-section:has(.bw-animated-banner) {
+    transform: none !important;
+}
+
+.bw-animated-banner {
+    /* Partecipa al flusso del .smart-header */
+    position: relative !important;
+    top: auto !important;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    margin-left: calc(50% - 50vw) !important;
+    margin-right: calc(50% - 50vw) !important;
+    left: auto !important;
+    right: auto !important;
+
+    /* Garantisce che il banner resti sopra la navigation nello stesso container */
+    z-index: 1 !important;
+
+    overflow: hidden;
+    background-color: #B5FF2B;
+    min-height: 60px;
+    display: flex;
+    align-items: center;
+}
+
+.bw-animated-banner__track {
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+    animation: bw-banner-scroll 50s linear infinite;
+    will-change: transform;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+}
+
+.bw-animated-banner__content {
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+    color: #000000;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 18px;
+    line-height: 1.2;
+    flex-shrink: 0;
+}
+
+.bw-animated-banner__content a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.bw-animated-banner__content a:hover {
+    text-decoration: underline;
+}
+
+.bw-animated-banner__item {
+    flex-shrink: 0;
+}
+
+/* Animation keyframes */
+@keyframes bw-banner-scroll {
+    0% {
+        transform: translateX(0);
+    }
+
+    100% {
+        transform: translateX(-10%);
+    }
+}
+
+/* Pause animation on hover or focus */
+.bw-animated-banner:hover .bw-animated-banner__track,
+.bw-animated-banner:focus-within .bw-animated-banner__track,
+.bw-animated-banner.paused .bw-animated-banner__track {
+    animation-play-state: paused;
+}
+
+/* Elementor editor styles */
+.elementor-editor-active .bw-animated-banner {
+    /* Posizionamento relativo nell'editor per facilitare la modifica */
+    position: relative !important;
+    top: auto !important;
+}
+
+.elementor-editor-active .bw-animated-banner__track {
+    animation-play-state: running;
+}
+
+/* Accessibility: Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    .bw-animated-banner__track {
+        animation: none;
+    }
+
+    .bw-animated-banner__content:not(:first-child) {
+        display: none;
+    }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .bw-animated-banner {
+        min-height: 50px;
+    }
+
+    .bw-animated-banner__content {
+        font-size: 16px;
+    }
+}
+
+@media (max-width: 480px) {
+    .bw-animated-banner {
+        min-height: 40px;
+    }
+
+    .bw-animated-banner__content {
+        font-size: 14px;
+    }
+}

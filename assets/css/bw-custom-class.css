@@ -1,0 +1,201 @@
+
+/* ==========================================================
+   BW FULL SECTION / FULL BLEED
+   Sezione edge-to-edge a larghezza piena compatibile con Elementor
+   ========================================================== */
+
+.bw-full-section,
+body.bw-site-layout-allow-full-bleed .bw-layout-full-bleed {
+  position: relative !important;
+  width: 100vw !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  max-width: 100vw !important;
+  box-sizing: border-box !important;
+  overflow: visible !important;
+}
+
+/* Sovrascrive i contenitori interni che impongono rientri */
+.bw-full-section > .elementor-container,
+.bw-full-section > .e-con,
+.bw-full-section .elementor-container,
+.bw-full-section .e-con,
+body.bw-site-layout-allow-full-bleed .bw-layout-full-bleed > .elementor-container,
+body.bw-site-layout-allow-full-bleed .bw-layout-full-bleed > .e-con,
+body.bw-site-layout-allow-full-bleed .bw-layout-full-bleed .elementor-container,
+body.bw-site-layout-allow-full-bleed .bw-layout-full-bleed .e-con {
+  max-width: none !important;
+  width: 100% !important;
+  margin: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+/* In caso tema imponga wrapper più esterno */
+.bw-full-section .site-content,
+.bw-full-section #content,
+.bw-full-section .elementor-inner,
+body.bw-site-layout-allow-full-bleed .bw-layout-full-bleed .site-content,
+body.bw-site-layout-allow-full-bleed .bw-layout-full-bleed #content,
+body.bw-site-layout-allow-full-bleed .bw-layout-full-bleed .elementor-inner {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+
+/* Supporto per sezioni con contenuti video o immagini di sfondo */
+.bw-full-section::before,
+.bw-full-section::after,
+body.bw-site-layout-allow-full-bleed .bw-layout-full-bleed::before,
+body.bw-site-layout-allow-full-bleed .bw-layout-full-bleed::after {
+  content: "";
+  display: block;
+}
+
+/* Variante opzionale: se vuoi forzare anche la rimozione del padding globale Elementor */
+.elementor .bw-full-section.elementor-section,
+body.bw-site-layout-allow-full-bleed .elementor .bw-layout-full-bleed.elementor-section {
+  --padding-left: 0 !important;
+  --padding-right: 0 !important;
+}
+
+/* ==========================================================
+   BW FULL BLEED RESPONSIVE ONLY
+   Applica il full-bleed solo su tablet e mobile
+   ========================================================== */
+
+@media (max-width: 1024px) {
+  body.bw-site-layout-allow-full-bleed .bw-layout-full-bleed-responsive {
+    position: relative !important;
+    width: 100vw !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    max-width: 100vw !important;
+    box-sizing: border-box !important;
+    overflow: visible !important;
+  }
+
+  body.bw-site-layout-allow-full-bleed .bw-layout-full-bleed-responsive > .elementor-container,
+  body.bw-site-layout-allow-full-bleed .bw-layout-full-bleed-responsive > .e-con,
+  body.bw-site-layout-allow-full-bleed .bw-layout-full-bleed-responsive .elementor-container,
+  body.bw-site-layout-allow-full-bleed .bw-layout-full-bleed-responsive .e-con {
+    max-width: none !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  body.bw-site-layout-allow-full-bleed .elementor .bw-layout-full-bleed-responsive.elementor-section {
+    --padding-left: 0 !important;
+    --padding-right: 0 !important;
+  }
+}
+
+/* ==========================================================
+   BW LAYOUT BREAKOUT
+   Allarga un container oltre il layout shell, senza andare full viewport
+   ========================================================== */
+
+body.bw-site-layout-allow-full-bleed .bw-layout-breakout {
+  position: relative !important;
+  width: min(calc(100vw - (var(--bw-site-shell-padding, 0px) * 2)), calc(var(--bw-site-max-width, 1400px) + var(--bw-site-breakout-extra, 320px))) !important;
+  max-width: none !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  box-sizing: border-box !important;
+  overflow: visible !important;
+}
+
+body.bw-site-layout-allow-full-bleed .bw-layout-breakout > .elementor-container,
+body.bw-site-layout-allow-full-bleed .bw-layout-breakout > .e-con,
+body.bw-site-layout-allow-full-bleed .bw-layout-breakout .elementor-container,
+body.bw-site-layout-allow-full-bleed .bw-layout-breakout .e-con {
+  max-width: none !important;
+  width: 100% !important;
+}
+
+/* Responsive check */
+@media (max-width: 768px) {
+  .bw-full-section,
+  body.bw-site-layout-allow-full-bleed .bw-layout-full-bleed {
+    width: 100vw !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+  }
+}
+
+/* ==========================================================
+   BW HOVER UNDERLINE LEFT TO RIGHT
+   Applica questa classe in Elementor > Advanced > CSS Classes
+   ========================================================== */
+
+.bw-hover-underline-ltr .elementor-heading-title a,
+.bw-hover-underline-ltr .elementor-item,
+.bw-hover-underline-ltr .elementor-icon-list-text,
+.bw-hover-underline-ltr .elementor-button-text,
+.bw-hover-underline-ltr .bw-navshop__item,
+.bw-hover-underline-ltr > a {
+  --bw-hover-underline-thickness: 2px;
+  --bw-hover-underline-gap: 2px;
+  display: inline-block;
+  padding-bottom: var(--bw-hover-underline-gap);
+  background-image: linear-gradient(currentColor, currentColor);
+  background-repeat: no-repeat;
+  background-size: 0% var(--bw-hover-underline-thickness);
+  background-position: 0 100%;
+  transition: background-size 0.28s ease;
+  text-decoration: none !important;
+}
+
+.bw-hover-underline-ltr .elementor-heading-title {
+  text-decoration: none !important;
+}
+
+.bw-hover-underline-ltr .elementor-heading-title a:hover,
+.bw-hover-underline-ltr .elementor-heading-title a:focus-visible,
+.bw-hover-underline-ltr .elementor-item:hover,
+.bw-hover-underline-ltr .elementor-item:focus-visible,
+.bw-hover-underline-ltr .elementor-icon-list-text:hover,
+.bw-hover-underline-ltr .elementor-icon-list-text:focus-visible,
+.bw-hover-underline-ltr .elementor-button-text:hover,
+.bw-hover-underline-ltr .elementor-button-text:focus-visible,
+.bw-hover-underline-ltr .bw-navshop__item:hover,
+.bw-hover-underline-ltr .bw-navshop__item:focus-visible,
+.bw-hover-underline-ltr > a:hover,
+.bw-hover-underline-ltr > a:focus-visible {
+  background-size: 100% var(--bw-hover-underline-thickness);
+}
+
+/* ==========================================================
+   BW STRONG BORDER RADIUS
+   Applica un border radius forte e clippa sfondi/overlay Elementor
+   ========================================================== */
+
+.bw-strong-border-radius,
+.elementor-section.bw-strong-border-radius,
+.elementor-element.bw-strong-border-radius,
+.e-con.bw-strong-border-radius {
+  border-radius: 15px !important;
+  overflow: hidden !important;
+  isolation: isolate !important;
+}
+
+.bw-strong-border-radius > .elementor-background-overlay,
+.bw-strong-border-radius > .elementor-motion-effects-container,
+.bw-strong-border-radius > .elementor-motion-effects-layer,
+.bw-strong-border-radius > .e-con-inner,
+.bw-strong-border-radius > .elementor-container,
+.bw-strong-border-radius > .e-con {
+  border-radius: inherit !important;
+}

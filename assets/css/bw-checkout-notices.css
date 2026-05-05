@@ -1,0 +1,179 @@
+/**
+ * BW Checkout Notices
+ *
+ * Custom styling for WooCommerce notices on checkout page
+ * Moves notices into left column and styles them as contained boxes
+ */
+
+/* ============================================
+   HIDE DEFAULT NOTICES POSITION
+   Hide ALL notices on checkout, then show only those in left column
+   ============================================ */
+
+body.woocommerce-checkout .woocommerce-error,
+body.woocommerce-checkout .woocommerce-message {
+	display: none !important;
+}
+
+/* body.woocommerce-checkout .woocommerce-info { display: none !important; } */
+
+/* Force show notices inside left column */
+body.woocommerce-checkout .bw-checkout-left .woocommerce-error,
+body.woocommerce-checkout .bw-checkout-left .woocommerce-message,
+body.woocommerce-checkout .bw-checkout-left .woocommerce-info {
+	display: flex !important;
+	visibility: visible !important;
+	opacity: 1 !important;
+	position: relative !important;
+	left: auto !important;
+	height: auto !important;
+}
+
+/* ============================================
+   NOTICES CONTAINER IN LEFT COLUMN
+   ============================================ */
+
+.bw-checkout-notices-container {
+	width: 100%;
+	margin-bottom: 24px;
+}
+
+/* ============================================
+   NOTICE BOX STYLING
+   ============================================ */
+
+.bw-checkout-left .woocommerce-error,
+.bw-checkout-left .woocommerce-message,
+.bw-checkout-left .woocommerce-info {
+	display: block !important;
+	padding: 16px 20px;
+	border-radius: 8px;
+	font-size: 14px;
+	line-height: 1.6;
+	margin: 0 0 16px 0 !important;
+	border: 1px solid;
+	position: relative;
+	width: 100%;
+	box-sizing: border-box;
+	visibility: visible !important;
+	opacity: 1 !important;
+	height: auto !important;
+	overflow: visible !important;
+	left: auto !important;
+	transition: opacity 0.2s ease;
+}
+
+.woocommerce-checkout .woocommerce-error.is-dismissing,
+.woocommerce-checkout .woocommerce-message.is-dismissing,
+.woocommerce-checkout .woocommerce-info.is-dismissing {
+	opacity: 0 !important;
+}
+
+/* Force compact stacked text in checkout notices (avoid global flex row rules). */
+body.woocommerce-checkout .bw-checkout-left .woocommerce-error,
+body.woocommerce-checkout .bw-checkout-left .woocommerce-message,
+body.woocommerce-checkout .bw-checkout-left .woocommerce-info,
+body.woocommerce-checkout .bw-checkout-notices-container .woocommerce-error,
+body.woocommerce-checkout .bw-checkout-notices-container .woocommerce-message,
+body.woocommerce-checkout .bw-checkout-notices-container .woocommerce-info {
+	display: block !important;
+}
+
+/* Error Box - Red */
+.bw-checkout-left .woocommerce-error {
+	background: #fef2f2;
+	border-color: #fecaca;
+	color: #991b1b;
+}
+
+.bw-checkout-left .woocommerce-error::before {
+	display: none !important;
+}
+
+/* Success Box - Green */
+.bw-checkout-left .woocommerce-message {
+	background: #ecfdf5;
+	border-color: #a7f3d0;
+	color: #065f46;
+}
+
+.bw-checkout-left .woocommerce-message::before {
+	display: none !important;
+}
+
+/* Info Box - Blue */
+.bw-checkout-left .woocommerce-info {
+	background: #eff6ff;
+	border-color: #bfdbfe;
+	color: #1e40af;
+}
+
+.bw-checkout-left .woocommerce-info::before {
+	display: none !important;
+}
+
+/* Hide ALL icons in checkout notices container - UL and LI elements */
+body.woocommerce-checkout .woocommerce-error::before,
+body.woocommerce-checkout .woocommerce-message::before,
+body.woocommerce-checkout .woocommerce-info::before,
+.bw-checkout-notices-container .woocommerce-error::before,
+.bw-checkout-notices-container .woocommerce-message::before,
+.bw-checkout-notices-container .woocommerce-info::before,
+.bw-checkout-notices-container ul::before,
+.bw-checkout-notices-container li::before,
+ul.woocommerce-error::before,
+ul.woocommerce-message::before,
+ul.woocommerce-info::before {
+	display: none !important;
+	content: none !important;
+}
+
+/* Notice text content */
+.bw-checkout-left .woocommerce-error,
+.bw-checkout-left .woocommerce-message,
+.bw-checkout-left .woocommerce-info {
+	font-weight: 400;
+}
+
+/* List items inside notices */
+.bw-checkout-left .woocommerce-error ul,
+.bw-checkout-left .woocommerce-message ul,
+.bw-checkout-left .woocommerce-info ul {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.bw-checkout-left .woocommerce-error li,
+.bw-checkout-left .woocommerce-message li,
+.bw-checkout-left .woocommerce-info li {
+	display: block !important;
+	margin: 0 !important;
+	line-height: 1.5;
+}
+
+/* Links inside notices */
+.bw-checkout-left .woocommerce-error a,
+.bw-checkout-left .woocommerce-message a,
+.bw-checkout-left .woocommerce-info a {
+	color: inherit;
+	text-decoration: underline;
+	font-weight: 500;
+}
+
+.bw-checkout-left .woocommerce-error a:hover,
+.bw-checkout-left .woocommerce-message a:hover,
+.bw-checkout-left .woocommerce-info a:hover {
+	text-decoration: none;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+
+	.bw-checkout-left .woocommerce-error,
+	.bw-checkout-left .woocommerce-message,
+	.bw-checkout-left .woocommerce-info {
+		padding: 14px 16px;
+		font-size: 13px;
+	}
+}

@@ -1,0 +1,368 @@
+/* ========================================
+   WRAPPER
+   ======================================== */
+.bw-biblio-widget {
+    padding: 0;
+    border: 1px solid #000;
+    border-radius: 8px;
+}
+
+/* ========================================
+   TITLE
+   ======================================== */
+.bw-biblio-title {
+    margin: 0 0 16px;
+    font-weight: 600;
+}
+
+/* ========================================
+   SECTION
+   ======================================== */
+.bw-biblio-section {
+    border: none;
+    border-radius: 0;
+    padding: 0;
+}
+
+.bw-biblio-section + .bw-biblio-section {
+    margin-top: 16px;
+}
+
+.bw-biblio-section-subtitle {
+    margin: 0 0 12px;
+    font-weight: 700;
+    color: #000;
+    font-size: 14px;
+}
+
+/* ========================================
+   TABLE / ROWS
+   ======================================== */
+.bw-biblio-table {
+    width: 100%;
+}
+
+.bw-biblio-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    align-items: start;
+    padding: 12px 0;
+}
+
+.bw-biblio-row:not(:last-child) {
+    border-bottom: 1px solid #000;
+}
+
+.bw-biblio-table--product-details {
+    width: 100%;
+}
+
+.bw-biblio-table--compatibility {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 32px;
+    justify-items: stretch;
+}
+
+.bw-biblio-table--compatibility .bw-biblio-row--compatibility {
+    grid-template-columns: 1fr;
+    gap: 0;
+    min-height: auto;
+    padding: 12px 0;
+    width: 100%;
+    justify-items: start;
+    border-bottom: 1px solid #000;
+}
+
+.bw-biblio-table--compatibility .bw-biblio-row--compatibility:nth-child(odd) {
+    padding-right: 0;
+}
+
+.bw-biblio-table--compatibility .bw-biblio-row--compatibility:nth-child(even) {
+    padding-left: 0;
+}
+
+/* ========================================
+   LABELS & VALUES
+   ======================================== */
+.bw-biblio-label {
+    font-weight: 600;
+}
+
+.bw-biblio-table--product-details .bw-biblio-row > .bw-biblio-value {
+    width: 100%;
+    text-align: right;
+}
+
+.bw-biblio-table--compatibility .bw-biblio-value--compatibility {
+    width: 100%;
+    text-align: left;
+}
+
+.bw-biblio-table--product-details .bw-biblio-pills {
+    justify-content: flex-end;
+}
+
+/* ========================================
+   ASSETS ROW (total assets + list)
+   ======================================== */
+.bw-biblio-row--assets {
+    gap: 12px;
+    grid-template-columns: 1fr 3fr;
+    min-height: 130px;
+    align-items: flex-start;
+}
+
+.bw-biblio-widget .bw-biblio-label.bw-biblio-label--assets {
+    font-size: inherit;
+    font-weight: 400 !important;
+    line-height: 1.2;
+    text-align: left;
+}
+
+.bw-biblio-table--product-details .bw-biblio-value.bw-biblio-value--assets-list {
+    line-height: 1.5;
+    white-space: pre-wrap;
+    text-align: left !important;
+    justify-self: start;
+}
+
+/* ========================================
+   FORMAT PILLS
+   ======================================== */
+.bw-biblio-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-start;
+}
+
+.bw-biblio-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 6px;
+    border: 0.8px solid #000;
+    border-radius: 999px;
+    font-size: 14px;
+    font-weight: 400;
+    text-transform: uppercase;
+    line-height: 1.2;
+}
+
+/* ========================================
+   EDITOR NOTICE
+   ======================================== */
+.bw-product-details-widget__notice {
+    padding: 12px 16px;
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 4px;
+    font-size: 13px;
+    color: #856404;
+}
+
+/* ========================================
+   RESPONSIVE — stack columns on small screens
+   ======================================== */
+@media (max-width: 480px) {
+    .bw-biblio-row,
+    .bw-biblio-row--assets {
+        grid-template-columns: 1fr;
+        gap: 4px;
+    }
+
+    .bw-biblio-table--product-details .bw-biblio-value,
+    .bw-biblio-table--product-details .bw-biblio-value--assets-list {
+        text-align: right;
+    }
+
+    .bw-biblio-table--product-details .bw-biblio-value--assets-list {
+        text-align: left !important;
+        justify-self: start;
+    }
+
+    .bw-biblio-table--compatibility .bw-biblio-value--compatibility {
+        text-align: left;
+    }
+
+    .bw-biblio-table--product-details .bw-biblio-pills {
+        justify-content: flex-end;
+    }
+
+    .bw-biblio-table--compatibility {
+        grid-template-columns: 1fr;
+        column-gap: 0;
+    }
+
+    .bw-biblio-table--compatibility .bw-biblio-row--compatibility:nth-child(odd),
+    .bw-biblio-table--compatibility .bw-biblio-row--compatibility:nth-child(even) {
+        padding-left: 0;
+        padding-right: 0;
+    }
+}
+
+/* ========================================
+   INFO BOX CONTENT
+   ======================================== */
+.bw-biblio-info-content {
+    line-height: 1.65;
+}
+
+.bw-biblio-info-content > *:first-child { margin-top: 0; }
+.bw-biblio-info-content > *:last-child  { margin-bottom: 0; }
+
+/* ========================================
+   ACCORDION — flash prevention (CSS-level)
+   Hides the body on the relevant breakpoints
+   BEFORE JS runs, so there is never a visible
+   flash of open content on page load.
+   JS inline styles take over with higher priority
+   once it initialises.
+   ======================================== */
+
+/* Mobile/tablet accordion: hide body on ≤1024px immediately.
+   :not(.is-open) ensures CSS does not fight the open state —
+   once JS adds .is-open the CSS rule no longer applies and
+   inline styles (set by JS) keep the body expanded. */
+@media (max-width: 1024px) {
+    .bw-biblio-accordion.bw-biblio-accordion--mobile:not(.is-open) .bw-biblio-accordion__body {
+        height: 0;
+        overflow: hidden;
+        opacity: 0;
+    }
+}
+
+/* Desktop accordion: hide body on ≥1025px immediately */
+@media (min-width: 1025px) {
+    .bw-biblio-accordion.bw-biblio-accordion--desktop:not(.is-open) .bw-biblio-accordion__body {
+        height: 0;
+        overflow: hidden;
+        opacity: 0;
+    }
+}
+
+/* Fallback: no sub-class → active everywhere */
+.bw-biblio-accordion:not(.bw-biblio-accordion--mobile):not(.bw-biblio-accordion--desktop):not(.is-open) .bw-biblio-accordion__body {
+    height: 0;
+    overflow: hidden;
+    opacity: 0;
+}
+
+/* Inner wrapper — provides top spacing that is properly clipped by
+   overflow:hidden on the outer body (unlike padding on the body itself,
+   which is NOT clipped and would show a visible gap when height:0). */
+.bw-biblio-accordion .bw-biblio-accordion__body-inner {
+    padding-top: 16px;
+}
+
+/* ========================================
+   ACCORDION — trigger reset
+   Specificity: (0,0,2,1) beats Elementor Kit's
+   ".elementor-kit-7 button" = (0,0,1,1).
+   All button-like properties are explicitly
+   neutralised so the kit cannot bleed through.
+   ======================================== */
+.bw-biblio-accordion button.bw-biblio-accordion__trigger {
+    /* Layout */
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    /* Reset button chrome */
+    background: none;
+    background-color: transparent;
+    border: none;
+    border-width: 0;
+    border-style: none;
+    border-radius: 0;
+    box-shadow: none;
+    outline: none;
+    /* Spacing */
+    padding: 0;
+    margin: 0;
+    /* Interaction (non-active state: heading-like) */
+    cursor: default;
+    pointer-events: none;
+    /* Typography — fully inherit from parent */
+    font: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+    font-family: inherit;
+    line-height: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+    text-align: left;
+    text-transform: none;
+    text-decoration: none;
+    /* Appearance */
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+/* Title inside trigger: same spacing as static heading before JS */
+.bw-biblio-accordion button.bw-biblio-accordion__trigger .bw-biblio-title {
+    margin: 0 0 16px;
+}
+
+/* ========================================
+   ACCORDION — arrow
+   Hidden until JS activates.
+   ======================================== */
+.bw-biblio-accordion .bw-biblio-accordion__arrow {
+    display: none;
+    align-items: center;
+    align-self: center;
+    flex-shrink: 0;
+    opacity: 0.65;
+    margin-bottom: 16px; /* align with title margin before JS */
+    transition: transform 0.38s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.bw-biblio-accordion .bw-biblio-accordion__arrow svg {
+    display: block;
+}
+
+/* ========================================
+   ACCORDION — JS-active state
+   Specificity: (0,0,3,1) — always wins over Kit.
+   ======================================== */
+.bw-biblio-accordion.bw-js-accordion-active button.bw-biblio-accordion__trigger {
+    cursor: pointer;
+    pointer-events: auto;
+    padding: 2px 0;
+}
+
+.bw-biblio-accordion.bw-js-accordion-active button.bw-biblio-accordion__trigger:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 3px;
+    border-radius: 3px;
+}
+
+/* No bottom margin on title once trigger is interactive */
+.bw-biblio-accordion.bw-js-accordion-active button.bw-biblio-accordion__trigger .bw-biblio-title {
+    margin: 0;
+}
+
+/* Arrow visible when active */
+.bw-biblio-accordion.bw-js-accordion-active .bw-biblio-accordion__arrow {
+    display: inline-flex;
+    margin-bottom: 0;
+}
+
+/* Open: arrow rotated upward */
+.bw-biblio-accordion.bw-js-accordion-active.is-open .bw-biblio-accordion__arrow {
+    transform: rotate(180deg);
+}
+
+/* Separator between trigger and body when open */
+.bw-biblio-accordion.bw-js-accordion-active.is-open button.bw-biblio-accordion__trigger {
+    padding-bottom: 14px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* Height / overflow / opacity are managed exclusively via JS inline styles
+   for smooth, glitch-free animation. CSS only handles static states.
+   Spacing above content is handled by .bw-biblio-accordion__body-inner
+   padding-top, which is safely clipped by overflow:hidden on the body. */

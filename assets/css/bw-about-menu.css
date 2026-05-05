@@ -1,0 +1,94 @@
+.bw-about-menu {
+    position: relative;
+    z-index: 0;
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 16px;
+    border: 1px solid var(--border-color, #080808);
+    border-radius: var(--border-radius, 999px);
+    background: var(--menu-bg, transparent);
+    overflow: hidden;
+    width: max-content;
+    max-width: 100%;
+    transition: border-color 0.3s ease, background-color 0.3s ease;
+    --spotlight-x: 0px;
+    --spotlight-size: 120px;
+    --spotlight-opacity: 0.4;
+    --spotlight-color: #80fd03;
+    --spotlight-strength: 70%;
+    --spotlight-speed: 0.6s;
+}
+
+.bw-about-menu::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: var(--spotlight-size, 120px);
+    height: 100%;
+    background: radial-gradient(
+        circle at center,
+        var(--spotlight-color, #80fd03) 0%,
+        transparent var(--spotlight-strength, 70%)
+    );
+    opacity: var(--spotlight-opacity, 0.4);
+    transform: translateX(var(--spotlight-x, 0px));
+    border-radius: inherit;
+    transition: transform var(--spotlight-speed, 0.6s) ease-in-out,
+                opacity 0.3s ease;
+    pointer-events: none;
+    z-index: 0;
+    mix-blend-mode: screen;
+}
+
+.bw-about-menu__list {
+    display: flex;
+    align-items: center;
+    gap: 40px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    position: relative;
+    z-index: 1;
+    min-height: 100%;
+    width: max-content;
+}
+
+.bw-about-menu__list .menu-item {
+    position: relative;
+    margin: 0;
+    padding: 0;
+    transition: color 0.3s ease;
+}
+
+.bw-about-menu__link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    color: inherit;
+    position: relative;
+    z-index: 2;
+    transition: color 0.35s ease;
+}
+
+.bw-about-menu__link:focus-visible {
+    outline: none;
+    color: #080808;
+}
+
+.bw-about-menu__list .menu-item:hover > .bw-about-menu__link,
+.bw-about-menu__list .menu-item:focus-within > .bw-about-menu__link,
+.bw-about-menu__list .menu-item.current-menu-item > .bw-about-menu__link {
+    color: #080808;
+}
+
+@media (max-width: 767px) {
+    .bw-about-menu {
+        border-radius: 40px;
+    }
+
+    .bw-about-menu__list {
+        gap: 20px;
+    }
+}

@@ -1,0 +1,560 @@
+/**
+ * BW Price Variation Widget Styles
+ */
+
+.bw-price-variation {
+	width: 100%;
+}
+
+/* Price Display */
+.bw-price-variation__price-wrapper {
+	display: flex;
+	align-items: baseline;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+
+.bw-price-variation__reviews-summary {
+	display: flex;
+	justify-content: center;
+	width: 100%;
+	margin-top: 6px;
+	margin-bottom: 16px;
+}
+
+.bw-price-variation__reviews-inline {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	color: #000000;
+	font-size: 12px;
+	line-height: 1.2;
+	font-weight: 500;
+	white-space: nowrap;
+}
+
+.bw-price-variation__reviews-stars {
+	position: relative;
+	display: inline-block;
+	font-size: 11px;
+	line-height: 1;
+	letter-spacing: 1px;
+}
+
+.bw-price-variation__reviews-stars-base {
+	color: rgba(217, 91, 45, 0.22);
+}
+
+.bw-price-variation__reviews-stars-fill {
+	position: absolute;
+	top: 0;
+	left: 0;
+	overflow: hidden;
+	color: #d95b2d;
+	white-space: nowrap;
+}
+
+.bw-price-variation__reviews-rating,
+.bw-price-variation__reviews-count,
+.bw-price-variation__reviews-separator {
+	font-size: 12px;
+	line-height: 1.2;
+}
+
+.bw-price-variation__price {
+	font-size: 48px;
+	font-weight: 700;
+	line-height: 1.2;
+	color: #000000;
+	transition: opacity 0.2s ease-in-out;
+	display: inline-block;
+}
+
+.bw-price-variation__price .woocommerce-Price-amount,
+.bw-price-variation__price .amount,
+.bw-price-variation__price .woocommerce-Price-currencySymbol {
+	font-size: inherit;
+	font-weight: inherit;
+	color: inherit;
+	line-height: inherit;
+}
+
+/* Variation Buttons */
+.bw-price-variation__variations {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	align-items: center;
+}
+
+.bw-price-variation__variation-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 160px;
+	padding: 12px 24px;
+	font-size: 16px;
+	font-weight: 500;
+	line-height: 1.4;
+	color: #000000;
+	background-color: #ffffff;
+	border: none;
+	border-radius: 50px;
+	cursor: pointer;
+	transition: all 0.3s ease;
+	white-space: nowrap;
+}
+
+.bw-price-variation__variation-button:hover,
+.bw-price-variation__variation-button.active {
+	color: #ffffff;
+	background-color: #000000;
+	border-color: #000000;
+}
+
+.bw-price-variation__variation-button:focus {
+	outline: 2px solid #000000;
+	outline-offset: 2px;
+}
+
+/* Out of Stock Variation Buttons */
+.bw-price-variation__variation-button.out-of-stock,
+.bw-price-variation__variation-button:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+	pointer-events: none;
+	text-decoration: line-through;
+	background-color: #f5f5f5;
+	color: #999999;
+	border-color: #cccccc;
+}
+
+.bw-price-variation__variation-button.out-of-stock:hover,
+.bw-price-variation__variation-button:disabled:hover {
+	background-color: #f5f5f5;
+	color: #999999;
+	border-color: #cccccc;
+}
+
+/* License Box */
+.bw-price-variation__license-box {
+	padding: 20px;
+	border: 1px solid #e0e0e0;
+	border-radius: 8px;
+	background-color: #ffffff;
+	margin-top: 20px;
+	line-height: 1.6;
+}
+
+.bw-license-table-wrapper {
+	width: 100%;
+}
+
+.bw-license-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 13px;
+	color: #000;
+}
+
+.bw-license-table--clean,
+.bw-license-table--clean td,
+.bw-license-table--clean th {
+	border: none !important;
+}
+
+.bw-license-table__cell {
+	padding: 4px 0;
+	vertical-align: top;
+}
+
+.bw-license-table__cell--label {
+	font-weight: 600;
+}
+
+/* Add To Cart Button */
+.bw-add-to-cart-wrapper {
+	display: flex;
+	width: 100%;
+	margin-top: 20px;
+}
+
+.bw-price-variation__cart-form {
+	width: 100%;
+}
+
+.bw-price-variation__paypal-price-mirror {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
+}
+
+.bw-price-variation__paypal-button-wrapper {
+	width: 100%;
+	margin-top: 12px;
+}
+
+.bw-price-variation__paypal-button-wrapper .ppc-button-wrapper,
+.bw-price-variation__paypal-button-wrapper [id^="ppc-button-"] {
+	width: 100%;
+}
+
+.bw-price-variation__payment-options-wrapper {
+	width: 100%;
+	display: flex;
+	justify-content: center;
+	margin-top: 12px;
+}
+
+.bw-price-variation__payment-options {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 14px;
+	line-height: 1.3;
+	font-weight: 400;
+	color: #000000;
+	text-decoration-line: underline !important;
+	text-decoration-style: solid;
+	text-underline-offset: 3px;
+	text-decoration-thickness: 1px;
+	transition: opacity 0.2s ease, color 0.2s ease;
+}
+
+.bw-price-variation__payment-options:hover,
+.bw-price-variation__payment-options:focus {
+	color: #000000;
+	opacity: 0.72;
+	text-decoration-line: underline !important;
+}
+
+.bw-price-variation__payment-options.is-disabled {
+	pointer-events: none;
+	opacity: 0.4;
+}
+
+.bw-add-to-cart-button {
+	display: inline-block;
+	width: 100%;
+	padding: 15px 25px;
+	font-size: 24px;
+	line-height: 24px;
+	font-weight: 500;
+	text-align: center;
+	text-decoration: none;
+	color: #000000;
+	background-color: #80FD03;
+	border: 1px solid #000000;
+	border-radius: 100px;
+	cursor: pointer;
+	transition: all 0.3s ease;
+	box-sizing: border-box;
+}
+
+.bw-add-to-cart-button:hover,
+.bw-add-to-cart-button:focus {
+	text-decoration: none;
+	opacity: 0.9;
+}
+
+.bw-add-to-cart-button.disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        pointer-events: none;
+}
+
+/* License Box Typography */
+.bw-price-variation__license-box p {
+	margin: 0 0 12px 0;
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-start;
+	gap: 20px;
+}
+
+.bw-price-variation__license-box p:last-child {
+	margin-bottom: 0;
+}
+
+.bw-price-variation__license-box strong,
+.bw-price-variation__license-box b {
+	font-weight: 600;
+	color: #000000;
+	flex-shrink: 0;
+	min-width: 150px;
+}
+
+.bw-price-variation__license-box a {
+	color: #0066cc;
+	text-decoration: underline;
+	transition: color 0.2s ease;
+}
+
+.bw-price-variation__license-box a:hover {
+	color: #004499;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+	.bw-price-variation__price {
+		font-size: 36px;
+	}
+
+	.bw-price-variation__reviews-summary {
+		margin-top: 4px;
+		margin-bottom: 14px;
+	}
+
+	.bw-price-variation__variation-button {
+		font-size: 14px;
+		padding: 10px 20px;
+		min-width: 120px;
+	}
+
+	.bw-price-variation__license-box p {
+		flex-direction: column;
+		gap: 8px;
+	}
+
+	.bw-price-variation__license-box strong,
+	.bw-price-variation__license-box b {
+		min-width: auto;
+	}
+
+}
+
+@media (max-width: 480px) {
+	.bw-price-variation__price {
+		font-size: 32px;
+	}
+
+	.bw-price-variation__reviews-inline {
+		gap: 5px;
+		font-size: 12px;
+		flex-wrap: wrap;
+		justify-content: center;
+	}
+
+	.bw-price-variation__variations {
+		gap: 8px;
+	}
+
+	.bw-price-variation__variation-button {
+		font-size: 13px;
+		padding: 8px 16px;
+		min-width: 120px;
+	}
+
+	.bw-price-variation__license-box {
+		padding: 16px;
+	}
+
+}
+
+/* -----------------------------------------------------------------------
+   Floating Add to Cart CTA
+   Appears when the original button exits the viewport.
+   Appended to <body> to escape all Elementor stacking contexts.
+   Animation: GPU-only transform + opacity — no layout cost.
+   ----------------------------------------------------------------------- */
+.bw-float-atc-wrap {
+	display: none;
+	position: fixed;
+	bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+	right: 88px;
+	z-index: 9998;
+	pointer-events: none;
+	opacity: 0;
+	transform: translateY(10px);
+	transition: opacity 0.22s ease, transform 0.22s ease;
+	will-change: opacity, transform;
+}
+
+.bw-float-atc-wrap.is-visible {
+	opacity: 1;
+	transform: translateY(0);
+	pointer-events: auto;
+}
+
+.bw-float-atc {
+	/* Layout only — visual styles (bg, color, border, border-radius,
+	   typography, padding) are copied at runtime from the original button's
+	   computed styles so they always match the Elementor panel settings. */
+	display: block;
+	min-width: 300px;
+	text-align: center;
+	text-decoration: none;
+	cursor: pointer;
+	/* Static shadow — never animated, so no GPU cost */
+	box-shadow: 0 4px 20px rgba(0, 0, 0, 0.18);
+	white-space: nowrap;
+	transition: filter 0.18s ease;
+}
+
+.bw-float-atc:hover {
+	filter: brightness(1.06);
+}
+
+.bw-float-atc:focus-visible {
+	outline: 2px solid #000000;
+	outline-offset: 3px;
+}
+
+.bw-float-atc.is-disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+	pointer-events: none;
+}
+
+@media (max-width: 480px) {
+	/* On small screens: full-width bottom bar */
+	.bw-float-atc-wrap {
+		display: block;
+		right: 0;
+		left: 0;
+		bottom: env(safe-area-inset-bottom, 0px);
+		padding: 10px 16px;
+		background: transparent;
+		backdrop-filter: none;
+		-webkit-backdrop-filter: none;
+		border-top: 0;
+		box-shadow: none;
+		text-align: center;
+	}
+
+	.bw-float-atc {
+		min-width: 0;
+		width: 100%;
+		max-width: 300px;
+		margin: 0 auto;
+		box-shadow: none;
+		padding: 8px 10px !important;
+		font-size: 18px !important;
+	}
+}
+
+/* =====================================================
+   License Box Accordion
+   Flash prevention: hide body before JS runs.
+   :not(.is-open) ensures CSS never fights the open state.
+   ===================================================== */
+
+@media (max-width: 1024px) {
+	.bw-price-variation__license-accordion.bw-license-accordion--mobile:not(.is-open) .bw-license-accordion__body {
+		height: 0;
+		overflow: hidden;
+		opacity: 0;
+	}
+}
+
+@media (min-width: 1025px) {
+	.bw-price-variation__license-accordion.bw-license-accordion--desktop:not(.is-open) .bw-license-accordion__body {
+		height: 0;
+		overflow: hidden;
+		opacity: 0;
+	}
+}
+
+/* Fallback: accordion on without sub-toggles → active everywhere */
+.bw-price-variation__license-accordion:not(.bw-license-accordion--mobile):not(.bw-license-accordion--desktop):not(.is-open) .bw-license-accordion__body {
+	height: 0;
+	overflow: hidden;
+	opacity: 0;
+}
+
+/* Inner wrapper: padding clipped safely by overflow:hidden on the body */
+.bw-price-variation__license-accordion .bw-license-accordion__body-inner {
+	padding-top: 12px;
+}
+
+/* =====================================================
+   Trigger — pill design
+   Specificity (0,0,2,1) beats Elementor Kit (0,0,1,1).
+   ===================================================== */
+.bw-price-variation__license-accordion button.bw-license-accordion__trigger {
+	/* Layout */
+	display: none; /* JS sets to flex when active */
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	width: 100%;
+	/* Pill design */
+	background-color: transparent;
+	border: 0;
+	border-radius: 999px;
+	box-shadow: none;
+	outline: none;
+	/* Spacing: left text indent, right smaller for the arrow pill */
+	padding: 0;
+	margin: 0;
+	/* Typography — inherit from page, no Kit overrides */
+	font: inherit;
+	font-size: inherit;
+	font-weight: inherit;
+	font-family: inherit;
+	line-height: inherit;
+	letter-spacing: inherit;
+	color: inherit;
+	text-align: left;
+	text-transform: none;
+	text-decoration: none;
+	/* Interaction */
+	cursor: pointer;
+	-webkit-appearance: none;
+	appearance: none;
+	transition: background-color 0.18s ease;
+}
+
+.bw-price-variation__license-accordion button.bw-license-accordion__trigger:hover {
+	background-color: transparent;
+}
+
+.bw-price-variation__license-accordion button.bw-license-accordion__trigger:focus-visible {
+	outline: 2px solid #111111;
+	outline-offset: 3px;
+}
+
+.bw-license-accordion__label {
+	flex: 1;
+}
+
+/* =====================================================
+   Arrow pill — small rounded container with chevron
+   ===================================================== */
+.bw-price-variation__license-accordion .bw-license-accordion__arrow {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	width: 38px;
+	height: 34px;
+	background-color: transparent;
+	border-radius: 999px;
+	transition: transform 0.38s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.bw-price-variation__license-accordion .bw-license-accordion__arrow svg {
+	display: block;
+	opacity: 0.75;
+}
+
+.bw-price-variation__license-accordion.is-open .bw-license-accordion__arrow {
+	transform: rotate(180deg);
+}
+
+/* =====================================================
+   JS-active state
+   Specificity (0,0,3,1) — always wins over Kit.
+   No open-state separator: trigger is a self-contained pill.
+   ===================================================== */
+.bw-price-variation__license-accordion.bw-js-accordion-active button.bw-license-accordion__trigger {
+	display: flex;
+}
+
+/* Height/overflow/opacity managed entirely by JS inline styles */

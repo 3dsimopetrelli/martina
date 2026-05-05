@@ -1,0 +1,63 @@
+/**
+ * BW Related Products Widget Styles
+ * Proportional-image grid for related products widget.
+ * Tablet and mobile are always 2 columns (not overridable via Elementor).
+ */
+
+.bw-related-products-widget {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.bw-related-products-grid {
+  --bw-rp-columns: 4;
+  --bw-rp-gap: 24px;
+  display: grid;
+  grid-template-columns: repeat(var(--bw-rp-columns), 1fr);
+  gap: var(--bw-rp-gap);
+  width: 100%;
+  box-sizing: border-box;
+  align-items: start; /* proportional: each card is as tall as its content */
+}
+
+/* Tablet: always 2 columns */
+@media (max-width: 1024px) {
+  .bw-related-products-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Tablet + mobile overlay override */
+@media (max-width: 1024px) {
+  .bw-related-products-widget--mobile-overlay-off .bw-product-card .bw-wallpost-overlay,
+  .bw-related-products-widget--mobile-overlay-off .bw-product-card .overlay-buttons,
+  .bw-related-products-widget--mobile-overlay-off .bw-product-card .bw-ss__overlay {
+    display: none !important;
+    opacity: 0 !important;
+    transform: none !important;
+    pointer-events: none !important;
+  }
+}
+
+/* Mobile: always 2 columns */
+@media (max-width: 767px) {
+  .bw-related-products-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Empty state */
+.bw-related-products-empty {
+  padding: 40px 20px;
+  text-align: center;
+  background: #f4f4f4;
+  border-radius: 8px;
+  color: #666;
+}
+
+.bw-related-products-empty p {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.5;
+}

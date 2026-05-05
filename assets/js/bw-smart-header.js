@@ -1,0 +1,869 @@
+/**
+ * ============================================================================
+ * SMART HEADER SCROLL ANIMATION SYSTEM
+ * ============================================================================
+ *
+ * Gestisce il comportamento dinamico dell'header smart con animazioni fluide:
+ * - Nasconde l'header quando si scrolla giù oltre 100px
+ * - Mostra l'header IMMEDIATAMENTE quando si scrolla su (anche 1px)
+ * - Applica effetto blur dopo 50px di scroll
+ * - Calcola automaticamente offset WordPress Admin Bar
+ * - Animazioni speculari per scroll up/down usando CSS transitions
+ * - Rilevamento AUTOMATICO zone scure per cambio colore testo/logo
+ *
+ * Dark Zone Detection (AUTOMATICO):
+ * - Analisi automatica del colore di sfondo di ogni sezione
+ * - Calcolo luminosità usando formula W3C (brightness)
+ * - Supporto per colori RGB, RGBA, HEX, gradient
+ * - Soglia personalizzabile (default 128/255)
+ * - Compatibilità con classe manuale .smart-header-dark-zone
+ *
+ * Performance:
+ * - requestAnimationFrame per ottimizzazione
+ * - Throttle per limitare chiamate
+ * - Passive event listeners
+ * - GPU acceleration via CSS
+ * - CSS variables per offset dinamici
+ * - IntersectionObserver per rilevamento zone scure
+ *
+ * @version 2.4.0
+ */
+
+(function($) {
+    'use strict';
+
+    /* ========================================================================
+       CONFIGURAZIONE
+       ======================================================================== */
+
+    // Configurazione di default - può essere sovrascritto da wp_localize_script
+    const DEFAULT_CONFIG = {
+        // Pixel di scroll prima di nascondere l'header (scroll DOWN)
+        scrollDownThreshold: 100,
+
+        // Threshold scroll UP - IMMEDIATO (anche 1px)
+        scrollUpThreshold: 0,
+
+        // Pixel minimi di movimento per rilevare cambio direzione
+        scrollDelta: 1,
+
+        // Pixel di scroll prima di attivare l'effetto blur
+        blurThreshold: 50,
+
+        // Intervallo di throttling per eventi scroll (ms)
+        throttleDelay: 16, // ~60fps
+
+        // Selettore CSS per l'header
+        headerSelector: '.smart-header',
+
+        // Debug mode
+        debug: false
+    };
+
+    // Merge con configurazione da WordPress (se presente)
+    const CONFIG = typeof bwSmartHeaderConfig !== 'undefined'
+        ? Object.assign({}, DEFAULT_CONFIG, bwSmartHeaderConfig)
+        : DEFAULT_CONFIG;
+
+    /* ========================================================================
+       VARIABILI GLOBALI
+       ======================================================================== */
+
+    let headerElement = null;
+    let lastScrollTop = 0;
+    let scrollDirection = null;
+    let ticking = false;
+    let isEditorActive = false;
+    let adminBarHeight = 0;
+    let animatedBannerHeight = 0;
+    let animatedBannerElement = null;
+    let bannerInsideHeader = false;
+    let bannerAffectsHeaderFlow = false;
+
+    // Dark Zone Detection
+    let darkZoneObserver = null;
+    let darkZones = [];
+    let isOnDarkZone = false;
+    let currentDarkZone = null;
+
+    /* ========================================================================
+       FUNZIONI UTILITY
+       ======================================================================== */
+
+    /**
+     * Log di debug condizionale
+     */
+    function debugLog(message, data = null) {
+        if (CONFIG.debug) {
+            const logMessage = '[Smart Header] ' + message;
+            if (data !== null) {
+                console.log(logMessage, data);
+            } else {
+                console.log(logMessage);
+            }
+        }
+    }
+
+    /**
+     * Throttle function - limita la frequenza di esecuzione
+     */
+    function throttle(func, delay) {
+        let lastCall = 0;
+        return function(...args) {
+            const now = Date.now();
+            if (now - lastCall >= delay) {
+                lastCall = now;
+                return func.apply(this, args);
+            }
+        };
+    }
+
+    /**
+     * Verifica se siamo nell'editor di Elementor
+     */
+    function isElementorEditor() {
+        return $('body').hasClass('elementor-editor-active') ||
+               (typeof window.elementorFrontend !== 'undefined' &&
+                typeof window.elementorFrontend.isEditMode === 'function' &&
+                window.elementorFrontend.isEditMode()) ||
+               typeof window.elementor !== 'undefined';
+    }
+
+    /**
+     * Calcola l'altezza del BW Animated Banner se presente
+     * Il banner può essere posizionato DENTRO il container .smart-header (sopra la navigazione)
+     * oppure immediatamente prima nel DOM. In entrambi i casi deve essere
+     * considerato come parte dell'altezza totale dello smart header.
+     */
+    function calculateAnimatedBannerHeight() {
+        bannerInsideHeader = false;
+        bannerAffectsHeaderFlow = false;
+
+        // Cerca prima dentro lo smart-header
+        if (headerElement && headerElement.length) {
+            animatedBannerElement = headerElement.find('.bw-animated-banner').first();
+        }
+
+        // Fallback: primo banner presente nel DOM
+        if (!animatedBannerElement || !animatedBannerElement.length) {
+            animatedBannerElement = $('.bw-animated-banner').first();
+        }
+
+        if (animatedBannerElement.length && animatedBannerElement.is(':visible')) {
+            const bannerNode = animatedBannerElement.get(0);
+            const computedStyle = window.getComputedStyle(bannerNode);
+            const bannerPosition = computedStyle.getPropertyValue('position');
+
+            animatedBannerHeight = animatedBannerElement.outerHeight() || 0;
+
+            bannerInsideHeader = headerElement && headerElement.length
+                ? headerElement.has(animatedBannerElement).length > 0
+                : false;
+
+            bannerAffectsHeaderFlow = bannerInsideHeader && bannerPosition !== 'fixed' && bannerPosition !== 'absolute';
+
+            debugLog('BW Animated Banner rilevato', {
+                height: animatedBannerHeight + 'px',
+                insideHeader: bannerInsideHeader,
+                affectsFlow: bannerAffectsHeaderFlow,
+                position: bannerPosition
+            });
+        } else {
+            animatedBannerHeight = 0;
+            bannerInsideHeader = false;
+            bannerAffectsHeaderFlow = false;
+            debugLog('BW Animated Banner non presente');
+        }
+
+        // Applica l'altezza usando CSS variable
+        document.documentElement.style.setProperty('--animated-banner-height', animatedBannerHeight + 'px');
+        debugLog('CSS variable impostata', { '--animated-banner-height': animatedBannerHeight + 'px' });
+    }
+
+    /**
+     * Calcola e applica l'offset per la WordPress admin bar
+     * Usa CSS variable per permettere transizioni smooth
+     */
+    function calculateAdminBarOffset() {
+        const adminBar = $('#wpadminbar');
+
+        if (adminBar.length && adminBar.is(':visible')) {
+            adminBarHeight = adminBar.outerHeight() || 0;
+            debugLog('WordPress admin bar rilevata', { height: adminBarHeight + 'px' });
+        } else {
+            adminBarHeight = 0;
+            debugLog('WordPress admin bar non presente');
+        }
+
+        // Applica l'offset usando CSS variable
+        document.documentElement.style.setProperty('--wp-admin-bar-height', adminBarHeight + 'px');
+        debugLog('CSS variable impostata', { '--wp-admin-bar-height': adminBarHeight + 'px' });
+    }
+
+    /**
+     * Restituisce l'altezza totale (header + banner)
+     */
+    function getTotalHeaderHeight() {
+        const headerHeight = headerElement && headerElement.length
+            ? (headerElement.outerHeight() || 0)
+            : 0;
+
+        // Aggiorna dinamicamente lo stato del banner per avere misure sempre correnti
+        calculateAnimatedBannerHeight();
+
+        // Se il banner è dentro il container e partecipa al flusso, l'altezza è già inclusa
+        if (bannerAffectsHeaderFlow) {
+            return headerHeight;
+        }
+
+        return headerHeight + animatedBannerHeight;
+    }
+
+    /**
+     * Calcola e applica tutti gli offset (admin bar + animated banner)
+     * Aggiorna anche il padding del body dinamicamente
+     */
+    function calculateAllOffsets() {
+        calculateAdminBarOffset();
+        calculateAnimatedBannerHeight();
+
+        // Calcola l'offset totale per lo smart-header
+        // Se il banner è DENTRO lo smart-header, non va aggiunto come offset separato
+        const totalTopOffset = adminBarHeight + (bannerInsideHeader ? 0 : animatedBannerHeight);
+        document.documentElement.style.setProperty('--smart-header-top-offset', totalTopOffset + 'px');
+
+        // Calcola il padding del body (header height + offsets)
+        if (headerElement && headerElement.length) {
+            const totalHeaderHeight = getTotalHeaderHeight();
+            const totalBodyPadding = adminBarHeight + totalHeaderHeight;
+
+            document.documentElement.style.setProperty('--smart-header-body-padding', totalBodyPadding + 'px');
+            document.documentElement.style.setProperty('--smart-header-total-height', totalHeaderHeight + 'px');
+
+            debugLog('Offset totali calcolati', {
+                adminBar: adminBarHeight + 'px',
+                banner: animatedBannerHeight + 'px',
+                header: totalHeaderHeight + 'px',
+                totalTop: totalTopOffset + 'px',
+                bodyPadding: totalBodyPadding + 'px'
+            });
+        }
+    }
+
+    /* ========================================================================
+       GESTIONE CLASSI HEADER
+       ======================================================================== */
+
+    /**
+     * Mostra l'header con animazione slideDown
+     */
+    function showHeader() {
+        if (!headerElement || isEditorActive) return;
+
+        headerElement.removeClass('hidden');
+        headerElement.addClass('visible');
+
+        debugLog('Header mostrato (visible)');
+    }
+
+    /**
+     * Nasconde l'header con slide verso l'alto
+     */
+    function hideHeader() {
+        if (!headerElement || isEditorActive) return;
+
+        headerElement.removeClass('visible');
+        headerElement.addClass('hidden');
+
+        debugLog('Header nascosto (hidden)');
+    }
+
+    /**
+     * Gestisce l'effetto blur basato sulla posizione di scroll
+     * Attivo dopo 50px di scroll
+     */
+    function handleBlurEffect(scrollTop, dynamicThreshold = CONFIG.blurThreshold) {
+        if (!headerElement || isEditorActive) return;
+
+        if (scrollTop > dynamicThreshold) {
+            if (!headerElement.hasClass('scrolled')) {
+                headerElement.addClass('scrolled');
+                debugLog('Blur effect attivato', { scrollTop, threshold: dynamicThreshold });
+            }
+        } else {
+            if (headerElement.hasClass('scrolled')) {
+                headerElement.removeClass('scrolled');
+                debugLog('Blur effect disattivato', { scrollTop, threshold: dynamicThreshold });
+            }
+        }
+    }
+
+    /* ========================================================================
+       DARK ZONE DETECTION
+       ======================================================================== */
+
+    /**
+     * Converte un colore RGB/RGBA in valori numerici
+     * @param {string} color - Colore in formato rgb(r,g,b) o rgba(r,g,b,a)
+     * @returns {object|null} - {r, g, b, a} o null se non valido
+     */
+    function parseColor(color) {
+        if (!color || color === 'transparent' || color === 'rgba(0, 0, 0, 0)') {
+            return null;
+        }
+
+        // Match rgb(r, g, b) o rgba(r, g, b, a)
+        const rgbaMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+        if (rgbaMatch) {
+            return {
+                r: parseInt(rgbaMatch[1], 10),
+                g: parseInt(rgbaMatch[2], 10),
+                b: parseInt(rgbaMatch[3], 10),
+                a: rgbaMatch[4] ? parseFloat(rgbaMatch[4]) : 1
+            };
+        }
+
+        // Match colori esadecimali #RRGGBB o #RGB
+        const hexMatch = color.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+        if (hexMatch) {
+            let hex = hexMatch[1];
+            if (hex.length === 3) {
+                hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+            }
+            return {
+                r: parseInt(hex.substr(0, 2), 16),
+                g: parseInt(hex.substr(2, 2), 16),
+                b: parseInt(hex.substr(4, 2), 16),
+                a: 1
+            };
+        }
+
+        return null;
+    }
+
+    /**
+     * Calcola la luminosità percepita di un colore usando la formula W3C
+     * https://www.w3.org/TR/AERT/#color-contrast
+     * @param {object} color - {r, g, b, a}
+     * @returns {number} - Valore 0-255 (0 = nero, 255 = bianco)
+     */
+    function getColorBrightness(color) {
+        if (!color) return 255; // Default: chiaro
+
+        // Formula W3C per luminosità percepita
+        // Brightness = (R * 299 + G * 587 + B * 114) / 1000
+        const brightness = (color.r * 299 + color.g * 587 + color.b * 114) / 1000;
+        return brightness;
+    }
+
+    /**
+     * Determina se un colore è "scuro"
+     * @param {object} color - {r, g, b, a}
+     * @param {number} threshold - Soglia luminosità (0-255, default 128)
+     * @returns {boolean} - true se scuro
+     */
+    function isColorDark(color, threshold = 128) {
+        if (!color) return false;
+
+        // Se il colore ha opacità molto bassa, non considerarlo scuro
+        if (color.a < 0.5) return false;
+
+        const brightness = getColorBrightness(color);
+        return brightness < threshold;
+    }
+
+    /**
+     * Ottiene il colore di sfondo effettivo di un elemento
+     * Risale la catena dei parent se l'elemento ha background trasparente
+     * @param {HTMLElement} element - Elemento da analizzare
+     * @returns {object|null} - {r, g, b, a} o null
+     */
+    function getEffectiveBackgroundColor(element) {
+        let current = element;
+        let maxDepth = 10; // Limita la ricerca a 10 livelli parent
+        let depth = 0;
+
+        while (current && depth < maxDepth) {
+            const computedStyle = window.getComputedStyle(current);
+            const bgColor = computedStyle.backgroundColor;
+            const parsed = parseColor(bgColor);
+
+            // Se troviamo un colore opaco, lo restituiamo
+            if (parsed && parsed.a > 0.5) {
+                return parsed;
+            }
+
+            // Controlla anche background-image (gradient scuri)
+            const bgImage = computedStyle.backgroundImage;
+            if (bgImage && bgImage !== 'none') {
+                // Cerca gradient scuri
+                if (bgImage.includes('gradient')) {
+                    // Estrae il primo colore dal gradient
+                    const gradientColorMatch = bgImage.match(/rgba?\([^)]+\)/);
+                    if (gradientColorMatch) {
+                        const gradientColor = parseColor(gradientColorMatch[0]);
+                        if (gradientColor && gradientColor.a > 0.5) {
+                            return gradientColor;
+                        }
+                    }
+                }
+            }
+
+            // Sale al parent
+            current = current.parentElement;
+            depth++;
+        }
+
+        // Default: sfondo chiaro (bianco)
+        return { r: 255, g: 255, b: 255, a: 1 };
+    }
+
+    /**
+     * Scansiona automaticamente il DOM per trovare sezioni con background scuro
+     * Cerca sezioni Elementor e altri container comuni
+     */
+    function autoDetectDarkSections() {
+        const sections = [];
+
+        // Selettori per sezioni Elementor e container comuni
+        const selectors = [
+            '.elementor-section',
+            '.elementor-container',
+            'section',
+            '[data-elementor-type]',
+            '.wp-block-cover',
+            '.entry-content > div',
+            'main > section',
+            'main > div'
+        ];
+
+        // Cerca tutte le sezioni
+        const allSections = document.querySelectorAll(selectors.join(', '));
+
+        debugLog('Scansione automatica sezioni', {
+            totalFound: allSections.length
+        });
+
+        allSections.forEach(section => {
+            // Salta lo SmartHeader stesso
+            if (section.classList.contains('smart-header') ||
+                section.closest('.smart-header')) {
+                return;
+            }
+
+            // Salta sezioni troppo piccole (probabilmente non sezioni principali)
+            const rect = section.getBoundingClientRect();
+            if (rect.height < 100) {
+                return;
+            }
+
+            // Ottieni il colore di sfondo effettivo
+            const bgColor = getEffectiveBackgroundColor(section);
+
+            // Verifica se è scuro (soglia 128 - metà dello spettro)
+            if (isColorDark(bgColor, 128)) {
+                sections.push(section);
+
+                debugLog('Sezione scura rilevata automaticamente', {
+                    element: section.tagName + (section.className ? '.' + section.className.split(' ')[0] : ''),
+                    color: `rgb(${bgColor.r}, ${bgColor.g}, ${bgColor.b})`,
+                    brightness: getColorBrightness(bgColor).toFixed(2)
+                });
+            }
+        });
+
+        debugLog('Rilevamento automatico completato', {
+            darkSectionsFound: sections.length
+        });
+
+        return sections;
+    }
+
+    /**
+     * Verifica se lo SmartHeader sta attraversando una dark zone
+     * Controlla se il rettangolo dello header (fisso in alto) interseca
+     * il rettangolo di una dark zone
+     */
+    function checkDarkZoneOverlap() {
+        if (!headerElement || !headerElement.length || isEditorActive) return;
+
+        const headerRect = headerElement[0].getBoundingClientRect();
+        const headerTop = headerRect.top;
+        const headerBottom = headerRect.bottom;
+        const headerHeight = headerRect.height;
+
+        let overlappingZone = null;
+        let maxOverlap = 0;
+
+        // Controlla ogni dark zone
+        darkZones.forEach(zone => {
+            const zoneRect = zone.getBoundingClientRect();
+            const zoneTop = zoneRect.top;
+            const zoneBottom = zoneRect.bottom;
+
+            // Calcola se c'è overlap
+            // L'header è fixed in top, quindi verifichiamo se la dark zone
+            // passa attraverso la posizione dell'header
+            const isOverlapping = (
+                zoneTop < headerBottom &&
+                zoneBottom > headerTop
+            );
+
+            if (isOverlapping) {
+                // Calcola la percentuale di overlap
+                const overlapTop = Math.max(headerTop, zoneTop);
+                const overlapBottom = Math.min(headerBottom, zoneBottom);
+                const overlapHeight = overlapBottom - overlapTop;
+                const overlapPercentage = (overlapHeight / headerHeight) * 100;
+
+                // Tiene traccia della zona con maggior overlap
+                if (overlapPercentage > maxOverlap) {
+                    maxOverlap = overlapPercentage;
+                    overlappingZone = zone;
+                }
+            }
+        });
+
+        // Soglia minima di overlap per attivare il cambio (30% dell'header deve essere sopra la dark zone)
+        const overlapThreshold = 30;
+        const shouldBeOnDark = overlappingZone !== null && maxOverlap >= overlapThreshold;
+
+        // Aggiorna lo stato solo se cambiato
+        if (shouldBeOnDark !== isOnDarkZone) {
+            isOnDarkZone = shouldBeOnDark;
+            currentDarkZone = overlappingZone;
+
+            if (isOnDarkZone) {
+                headerElement.addClass('smart-header--on-dark');
+                debugLog('SmartHeader entrato in dark zone', {
+                    overlapPercentage: maxOverlap.toFixed(2) + '%'
+                });
+            } else {
+                headerElement.removeClass('smart-header--on-dark');
+                debugLog('SmartHeader uscito da dark zone');
+            }
+        }
+    }
+
+    /**
+     * Inizializza il sistema di rilevamento dark zones
+     * Usa IntersectionObserver per performance ottimali
+     * MODALITÀ AUTOMATICA: Rileva automaticamente sezioni con background scuro
+     */
+    function initDarkZoneDetection() {
+        // PRIORITÀ 1: Cerca sezioni con classe manuale .smart-header-dark-zone
+        const manualDarkZones = Array.from(document.querySelectorAll('.smart-header-dark-zone'));
+
+        // PRIORITÀ 2: Rilevamento automatico sezioni scure
+        const autoDarkZones = autoDetectDarkSections();
+
+        // Combina entrambe (rimuovi duplicati)
+        const allDarkZones = [...manualDarkZones];
+        autoDarkZones.forEach(zone => {
+            if (!manualDarkZones.includes(zone)) {
+                allDarkZones.push(zone);
+            }
+        });
+
+        darkZones = allDarkZones;
+
+        if (darkZones.length === 0) {
+            debugLog('⚠️  Nessuna dark zone trovata (né manuale né automatica)');
+            return;
+        }
+
+        debugLog('✅ Dark zones rilevate', {
+            total: darkZones.length,
+            manual: manualDarkZones.length,
+            auto: autoDarkZones.length
+        });
+
+        // Usa IntersectionObserver per rilevare quando le zone entrano/escono dal viewport
+        // Questo ottimizza le performance controllando solo le zone visibili
+        const observerOptions = {
+            root: null, // viewport
+            rootMargin: '0px',
+            threshold: [0, 0.1, 0.25, 0.5, 0.75, 1.0] // Multiple thresholds per precisione
+        };
+
+        darkZoneObserver = new IntersectionObserver((entries) => {
+            // Controlla overlap quando una zona diventa visibile o cambia visibilità
+            entries.forEach(entry => {
+                if (entry.isIntersecting || entry.intersectionRatio > 0) {
+                    // La zona è almeno parzialmente visibile, controlla overlap
+                    checkDarkZoneOverlap();
+                }
+            });
+        }, observerOptions);
+
+        // Osserva tutte le dark zones
+        darkZones.forEach(zone => {
+            darkZoneObserver.observe(zone);
+        });
+
+        // Controllo iniziale
+        checkDarkZoneOverlap();
+
+        debugLog('✅ Dark zone detection inizializzato');
+    }
+
+    /**
+     * Handler ottimizzato per il controllo delle dark zones durante lo scroll
+     */
+    function handleDarkZoneScroll() {
+        if (!headerElement || isEditorActive || darkZones.length === 0) return;
+
+        checkDarkZoneOverlap();
+    }
+
+    /* ========================================================================
+       GESTIONE SCROLL
+       ======================================================================== */
+
+    /**
+     * Handler principale dello scroll con logica ottimizzata
+     */
+    function handleScroll() {
+        if (!headerElement || isEditorActive) return;
+
+        const currentScrollTop = Math.max(0, $(window).scrollTop());
+        const totalHeaderHeight = getTotalHeaderHeight();
+
+        // Previeni calcoli se non c'è movimento significativo
+        if (Math.abs(currentScrollTop - lastScrollTop) < CONFIG.scrollDelta) {
+            return;
+        }
+
+        // Determina direzione scroll
+        const newDirection = currentScrollTop > lastScrollTop ? 'down' : 'up';
+        const dynamicScrollDownThreshold = Math.max(CONFIG.scrollDownThreshold, totalHeaderHeight);
+        const dynamicBlurThreshold = Math.max(CONFIG.blurThreshold, Math.round(totalHeaderHeight * 0.5));
+
+        debugLog('Scroll ' + newDirection, {
+            current: currentScrollTop,
+            last: lastScrollTop,
+            delta: currentScrollTop - lastScrollTop,
+            headerHeight: totalHeaderHeight,
+            scrollDownThreshold: dynamicScrollDownThreshold,
+            blurThreshold: dynamicBlurThreshold
+        });
+
+        // ====================================================================
+        // LOGICA PRINCIPALE:
+        // ====================================================================
+
+        if (newDirection === 'up') {
+            // SCROLL UP → Mostra IMMEDIATAMENTE (anche 1px)
+            showHeader();
+
+        } else if (newDirection === 'down') {
+            // SCROLL DOWN
+            if (currentScrollTop > dynamicScrollDownThreshold) {
+                // Oltre l'altezza totale dell'header → Nascondi
+                hideHeader();
+            } else {
+                // Sotto soglia dinamica → Mostra header
+                showHeader();
+            }
+        }
+
+        // Gestisci effetto blur usando soglia dinamica
+        handleBlurEffect(currentScrollTop, dynamicBlurThreshold);
+
+        // Gestisci rilevamento dark zones
+        handleDarkZoneScroll();
+
+        // Aggiorna variabili di tracking
+        scrollDirection = newDirection;
+        lastScrollTop = currentScrollTop;
+    }
+
+    /**
+     * Handler ottimizzato con requestAnimationFrame
+     * Garantisce performance fluide a 60fps
+     */
+    function optimizedScrollHandler() {
+        if (!ticking) {
+            window.requestAnimationFrame(function() {
+                handleScroll();
+                ticking = false;
+            });
+            ticking = true;
+        }
+    }
+
+    /**
+     * Throttled scroll handler per limitare le chiamate
+     */
+    const throttledScrollHandler = throttle(optimizedScrollHandler, CONFIG.throttleDelay);
+
+    /* ========================================================================
+       INIZIALIZZAZIONE
+       ======================================================================== */
+
+    /**
+     * Inizializza il sistema smart header
+     */
+    function init() {
+        debugLog('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        debugLog('Inizializzazione Smart Header Scroll System');
+        debugLog('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+        // Verifica se siamo nell'editor
+        isEditorActive = isElementorEditor();
+
+        if (isEditorActive) {
+            debugLog('⚠️  Editor Elementor rilevato - Smart Header disabilitato');
+            return;
+        }
+
+        // Trova l'elemento header
+        headerElement = $(CONFIG.headerSelector);
+
+        if (!headerElement.length) {
+            console.warn('[Smart Header] ⚠️  Elemento "' + CONFIG.headerSelector + '" non trovato!');
+            console.warn('[Smart Header] Aggiungi la classe "smart-header" al container dell\'header in Elementor.');
+            return;
+        }
+
+        debugLog('✅ Header element trovato', {
+            selector: CONFIG.headerSelector,
+            height: headerElement.outerHeight() + 'px'
+        });
+
+        // Imposta stato iniziale
+        lastScrollTop = Math.max(0, $(window).scrollTop());
+
+        // Applica stato iniziale basato sull'altezza reale dell'header
+        const initialHeaderHeight = getTotalHeaderHeight();
+        const initialBlurThreshold = Math.max(CONFIG.blurThreshold, Math.round(initialHeaderHeight * 0.5));
+
+        if (lastScrollTop > initialBlurThreshold) {
+            headerElement.addClass('scrolled');
+        }
+
+        // Header sempre visibile all'inizio
+        headerElement.addClass('visible');
+
+        // Calcola e applica tutti gli offset (admin bar + animated banner)
+        calculateAllOffsets();
+
+        // Inizializza rilevamento dark zones
+        initDarkZoneDetection();
+
+        // ====================================================================
+        // EVENT LISTENERS con opzione PASSIVE per performance
+        // ====================================================================
+
+        // Scroll event con passive listener
+        window.addEventListener('scroll', throttledScrollHandler, { passive: true });
+        debugLog('✅ Scroll event listener registrato (passive)');
+
+        // Resize event con throttle e passive
+        const throttledResizeHandler = throttle(function() {
+            debugLog('Window resized - Ricalcolo stato');
+            calculateAllOffsets(); // Ricalcola tutti gli offset su resize
+            handleScroll();
+            checkDarkZoneOverlap(); // Ricalcola dark zone overlap su resize
+        }, 250);
+
+        window.addEventListener('resize', throttledResizeHandler, { passive: true });
+        debugLog('✅ Resize event listener registrato (passive)');
+
+        // Ricalcola su window load per includere asset caricati dopo DOM ready
+        $(window).on('load', function() {
+            debugLog('Window load - Ricalcolo offset');
+            calculateAllOffsets();
+            handleScroll();
+            checkDarkZoneOverlap();
+        });
+
+        debugLog('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        debugLog('✅ Sistema inizializzato con successo');
+        debugLog('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        debugLog('Configurazione attiva:', CONFIG);
+    }
+
+    /**
+     * Cleanup delle risorse
+     */
+    function cleanup() {
+        debugLog('Cleanup Smart Header System...');
+
+        window.removeEventListener('scroll', throttledScrollHandler);
+        window.removeEventListener('resize', throttledScrollHandler);
+
+        // Disconnetti observer dark zones
+        if (darkZoneObserver) {
+            darkZoneObserver.disconnect();
+            darkZoneObserver = null;
+        }
+    }
+
+    /* ========================================================================
+       AVVIO
+       ======================================================================== */
+
+    /**
+     * Avvia quando jQuery e DOM sono pronti
+     */
+    $(document).ready(function() {
+        // Piccolo delay per assicurarsi che Elementor sia completamente caricato
+        setTimeout(init, 100);
+    });
+
+    /**
+     * Cleanup su unload
+     */
+    $(window).on('beforeunload', cleanup);
+
+    /**
+     * Gestione Elementor frontend (se presente)
+     */
+    if (typeof window.elementorFrontend !== 'undefined') {
+        $(window).on('elementor/frontend/init', function() {
+            debugLog('Elementor frontend init event');
+            setTimeout(function() {
+                if (!isElementorEditor() && !headerElement) {
+                    init();
+                } else if (headerElement && headerElement.length) {
+                    calculateAllOffsets();
+                    handleScroll();
+                }
+            }, 150);
+        });
+    }
+
+    /* ========================================================================
+       API PUBBLICA (opzionale - per debugging)
+       ======================================================================== */
+
+    // Esponi API globale per debugging in console
+    window.bwSmartHeader = {
+        version: '2.4.0',
+        config: CONFIG,
+        show: showHeader,
+        hide: hideHeader,
+        getState: function() {
+            return {
+                scrollTop: lastScrollTop,
+                direction: scrollDirection,
+                isVisible: headerElement ? headerElement.hasClass('visible') : null,
+                isHidden: headerElement ? headerElement.hasClass('hidden') : null,
+                hasBlur: headerElement ? headerElement.hasClass('scrolled') : null,
+                adminBarHeight: adminBarHeight,
+                animatedBannerHeight: animatedBannerHeight,
+                totalTopOffset: adminBarHeight + (bannerInsideHeader ? 0 : animatedBannerHeight),
+                isOnDarkZone: isOnDarkZone,
+                darkZonesCount: darkZones.length
+            };
+        },
+        recalculateAdminBar: calculateAdminBarOffset,
+        recalculateAllOffsets: calculateAllOffsets,
+        recheckDarkZones: checkDarkZoneOverlap,
+        getDarkZones: function() {
+            return darkZones;
+        }
+    };
+
+})(jQuery);

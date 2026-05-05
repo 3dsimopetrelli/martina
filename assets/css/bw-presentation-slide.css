@@ -1,0 +1,597 @@
+/**
+ * BW Presentation Slide Widget Styles
+ * Supporta: layout horizontal (Embla), layout vertical (elevator + Embla responsive)
+ * Stili base Embla (viewport/container) → bw-embla-core.css
+ */
+
+/* ========================================
+   WRAPPER & COMUNE
+   ======================================== */
+.bw-ps-wrapper {
+    position: relative;
+    width: 100%;
+    transition: opacity 0.5s ease;
+}
+
+.bw-ps-image {
+    position: relative;
+    overflow: hidden;
+    /* Base color shown while image is downloading */
+    background-color: #e8e8e8;
+}
+
+/* Shimmer skeleton: animated gradient while image downloads */
+.bw-ps-image::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        90deg,
+        transparent      0%,
+        rgba(255,255,255,0.55) 50%,
+        transparent      100%
+    );
+    background-size: 200% 100%;
+    animation: bw-ps-shimmer 1.4s infinite linear;
+    z-index: 1;
+    pointer-events: none;
+}
+
+/* Hide shimmer once image has loaded (modern browsers using :has()) */
+.bw-ps-image:has(img.is-loaded)::before {
+    display: none;
+}
+
+/* Fallback for older browsers: class on container set by JS */
+.bw-ps-image.is-loaded::before {
+    display: none;
+}
+
+@keyframes bw-ps-shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* Respect user's motion preferences */
+@media (prefers-reduced-motion: reduce) {
+    .bw-ps-image::before {
+        animation: none;
+    }
+}
+
+/* Images use .bw-embla-img class from bw-embla-core.css for fade-in;
+   here we add cosmetic rules only */
+.bw-ps-image img {
+    display: block;
+    width: 100%;
+    height: auto;
+    transition: transform 0.3s ease;
+    /* Ensure image appears above the shimmer ::before pseudo-element */
+    position: relative;
+    z-index: 2;
+}
+
+.bw-ps-image-clickable {
+    cursor: pointer;
+}
+
+/* ========================================
+   LAYOUT HORIZONTAL
+   ======================================== */
+.bw-ps-horizontal {
+    position: relative;
+    width: 100%;
+}
+
+/* Il viewport Embla occupa tutto lo spazio */
+.bw-ps-embla-viewport {
+    width: 100%;
+}
+
+/* Slide: dimensione di default 100% — override via breakpoint CSS inline in PHP */
+.bw-ps-slide {
+    padding: 10px;
+    outline: none;
+    /* flex size viene impostato dal <style> inline generato dal PHP per breakpoint */
+}
+
+/* ========================================
+   FRECCE DI NAVIGAZIONE
+   ======================================== */
+.bw-ps-arrows-container {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    display: flex;
+    gap: 10px;
+    z-index: 10;
+    flex-direction: row;
+    align-items: center;
+}
+
+.bw-ps-arrow {
+    /* Reset stili Elementor */
+    background: none !important;
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+
+    color: #000;
+    cursor: pointer;
+    padding: 10px;
+    transition: opacity 0.3s ease;
+    user-select: none;
+    border-radius: 0;
+    text-shadow: none;
+    font-weight: normal;
+    line-height: 1;
+    text-decoration: none;
+    /* Allinea l'SVG al centro del bottone */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.bw-ps-arrow svg {
+    display: block;
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    /* Ereditano color dal bottone per il controllo colore di Elementor */
+    stroke: currentColor;
+}
+
+.bw-ps-arrow:hover,
+.bw-ps-arrow:focus,
+.bw-ps-arrow:active {
+    background: none !important;
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+.bw-ps-arrow:hover  { opacity: 0.7; }
+.bw-ps-arrow:focus  { outline: 2px solid currentColor; outline-offset: 2px; }
+
+.bw-ps-arrow:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
+/* ========================================
+   DOTS (PAGINAZIONE)
+   ======================================== */
+.bw-ps-dots-container {
+    position: absolute;
+    bottom: -25px;
+    left: 0;
+    right: 0;
+    display: flex;
+    z-index: 10;
+    pointer-events: none;
+}
+
+.bw-ps-dots-container .bw-ps-dots-list {
+    pointer-events: auto;
+}
+
+/* Allineamento dots */
+.bw-ps-dots-left   { justify-content: flex-start; padding-left: 20px; }
+.bw-ps-dots-center { justify-content: center; }
+.bw-ps-dots-right  { justify-content: flex-end; padding-right: 20px; }
+
+/* ========================================
+   MODALITÀ ALTEZZA IMMAGINI
+   ======================================== */
+
+/* Fixed Height: altezza fissa, larghezza auto */
+.bw-ps-horizontal.bw-ps-height-fixed .bw-ps-image img {
+    width: auto;
+}
+
+/* Contain: adatta l'immagine entro dimensioni fisse */
+.bw-ps-horizontal.bw-ps-height-contain .bw-ps-image img {
+    object-fit: contain;
+    object-position: center;
+}
+
+/* Cover: riempie le dimensioni fisse (possibile crop) */
+.bw-ps-horizontal.bw-ps-height-cover .bw-ps-image img {
+    object-fit: cover;
+    object-position: center;
+}
+
+/* ========================================
+   LAYOUT VERTICAL — DESKTOP (elevator)
+   ======================================== */
+.bw-ps-vertical {
+    display: flex;
+    gap: 20px;
+    width: 100%;
+}
+
+.bw-ps-thumbnails {
+    flex: 0 0 150px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    overflow-y: auto;
+    max-height: 800px;
+}
+
+.bw-ps-thumb {
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.3s ease;
+    border: 2px solid transparent;
+}
+
+.bw-ps-thumb:hover,
+.bw-ps-thumb.active {
+    opacity: 1;
+    border-color: #000;
+}
+
+.bw-ps-thumb img {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.bw-ps-main-images {
+    flex: 1;
+    overflow-y: auto;
+    max-height: 800px;
+    scroll-behavior: smooth;
+}
+
+.bw-ps-main-image {
+    margin-bottom: 20px;
+}
+
+.bw-ps-main-image:last-child {
+    margin-bottom: 0;
+}
+
+/* ========================================
+   LAYOUT VERTICAL — RESPONSIVE (Embla)
+   ======================================== */
+.bw-ps-vertical-responsive {
+    width: 100%;
+}
+
+/* Main viewport */
+.bw-ps-main-viewport {
+    margin-bottom: 15px;
+}
+
+.bw-ps-slide-main {
+    outline: none;
+}
+
+.bw-ps-slide-main img {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.bw-ps-slide-thumb {
+    padding: 5px;
+    cursor: pointer;
+    outline: none;
+    opacity: 0.6;
+    transition: opacity 0.3s ease;
+}
+
+.bw-ps-slide-thumb.is-active {
+    opacity: 1;
+}
+
+.bw-ps-slide-thumb img {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+/* ========================================
+   POPUP / MODAL
+   ======================================== */
+.bw-ps-popup-overlay {
+    --bw-ps-popup-header-height: 0px;
+    --bw-ps-popup-body-pad-top: 40px;
+    --bw-ps-popup-body-pad-bottom: 40px;
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(255, 255, 255, 0.95);
+    z-index: 99999;
+    overflow-y: auto;
+    /* iOS Safari: enables momentum scrolling inside a fixed container */
+    -webkit-overflow-scrolling: touch;
+    /* Prevent scroll from propagating to the page behind the modal */
+    overscroll-behavior: contain;
+
+    /*
+     * Visibility-based show/hide — never toggling display.
+     *
+     * display:none → display:block + CSS transition is broken on Safari:
+     * the browser discards the element's opacity state when it is display:none,
+     * so there is no "from" value for the transition and Safari skips it.
+     *
+     * visibility:hidden keeps the element in the layout at all times, so
+     * Safari always has a valid starting state and the opacity transition fires
+     * correctly. pointer-events:none prevents interaction while hidden.
+     *
+     * On close: visibility delays 0.3 s (matching opacity transition) so the
+     * element becomes non-interactive only after it has fully faded out.
+     */
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.3s ease, visibility 0s linear 0.3s;
+}
+
+.bw-ps-popup-overlay.active {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    /* On open: visibility is immediate (0s delay), opacity transitions */
+    transition: opacity 0.3s ease, visibility 0s linear 0s;
+}
+
+.bw-ps-popup {
+    position: relative;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    background: #fff;
+    min-height: 100vh;
+}
+
+.bw-ps-popup-header {
+    position: sticky;
+    top: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 24px;
+    padding: 20px 30px;
+    background-color: #fff;
+    border-bottom: 1px solid #eee;
+    z-index: 10;
+}
+
+.bw-ps-popup-header .bw-ps-popup-title {
+    margin: 0;
+    min-width: 0;
+    flex: 1 1 auto;
+    font-size: 16px !important;
+    line-height: 20px !important;
+    font-weight: 600;
+    color: #000;
+}
+
+.bw-ps-popup-header .bw-ps-popup-close,
+.bw-ps-popup-header .bw-ps-popup-close .bw-ps-popup-close-text {
+    background: none !important;
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    -webkit-tap-highlight-color: transparent;
+    font-size: 16px !important;
+    line-height: 1 !important;
+    cursor: pointer;
+    color: #000;
+    transition: color 0.3s ease;
+    padding: 0;
+    width: auto;
+    height: auto;
+    min-width: 0;
+    min-height: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0 !important;
+    text-shadow: none;
+    font-weight: normal;
+    text-decoration: none;
+    opacity: 1;
+    visibility: visible;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.bw-ps-popup-close:hover  { color: #666; }
+.bw-ps-popup-close:focus,
+.bw-ps-popup-close:focus-visible {
+    outline: none !important;
+    outline-offset: 0 !important;
+    box-shadow: none !important;
+}
+.bw-ps-popup-close:active { opacity: 0.7; }
+
+.bw-ps-popup-body {
+    padding: 40px 30px;
+}
+
+@media (max-width: 767px) {
+    .bw-ps-popup-header .bw-ps-popup-title {
+        font-size: 12px !important;
+        line-height: 18px !important;
+    }
+}
+
+.bw-ps-popup-image {
+    margin-bottom: 40px;
+    text-align: center;
+}
+
+.bw-ps-popup-image:last-child {
+    margin-bottom: 0;
+}
+
+.bw-ps-popup-image img {
+    max-width: min(2000px, 100%);
+    width: auto;
+    max-height: calc(
+        100dvh
+        - var(--bw-ps-popup-header-height, 0px)
+        - var(--bw-ps-popup-body-pad-top, 40px)
+        - var(--bw-ps-popup-body-pad-bottom, 40px)
+    );
+    height: auto;
+    display: inline-block;
+    object-fit: contain;
+    /* Popup images usano bw-embla-img per il fade-in */
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.bw-ps-popup-image img.is-loaded {
+    opacity: 1;
+}
+
+/* ========================================
+   CUSTOM CURSOR — design fisso glassmorphism
+   ======================================== */
+.bw-ps-custom-cursor {
+    position: fixed;
+    left: 0;
+    top: 0;
+    pointer-events: none;
+    z-index: 99998;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 88px;
+    height: 88px;
+    border-radius: 50%;
+    /* Frosted glass: light fill + strong blur on content behind */
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(0, 0, 0, 0.28);
+    /* Position via JS-written CSS vars; -44px centers the 88×88 element on the pointer */
+    translate: calc(var(--bw-ps-cursor-x, 0px) - 44px) calc(var(--bw-ps-cursor-y, 0px) - 44px);
+    scale: 0;
+    transition: scale 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
+                opacity 0.15s ease;
+    opacity: 0;
+    backdrop-filter: blur(14px) saturate(1.8);
+    -webkit-backdrop-filter: blur(14px) saturate(1.8);
+    will-change: translate, scale;
+}
+
+.bw-ps-custom-cursor.active {
+    display: flex;
+    opacity: 1;
+    scale: 1;
+}
+
+/* Freccia ← per la slide a sinistra */
+.bw-ps-custom-cursor.prev::before {
+    content: '←';
+    font-size: 20px;
+    font-weight: 300;
+    color: rgba(0, 0, 0, 0.75);
+    line-height: 1;
+}
+
+/* Freccia → per la slide a destra */
+.bw-ps-custom-cursor.next::before {
+    content: '→';
+    font-size: 20px;
+    font-weight: 300;
+    color: rgba(0, 0, 0, 0.75);
+    line-height: 1;
+}
+
+/* Cerchio pulito per la slide centrale (zoom) */
+.bw-ps-custom-cursor.zoom::before {
+    content: '+';
+    font-size: 22px;
+    font-weight: 300;
+    color: rgba(0, 0, 0, 0.6);
+    line-height: 1;
+}
+
+.bw-ps-hide-cursor,
+.bw-ps-hide-cursor * {
+    cursor: none !important;
+}
+
+/* Ripristina il cursore di sistema sulle frecce (fuori dall'area immagini) */
+.bw-ps-hide-cursor .bw-ps-arrow,
+.bw-ps-hide-cursor .bw-ps-arrow * {
+    cursor: pointer !important;
+}
+
+/* ========================================
+   RESPONSIVE
+   ======================================== */
+@media (max-width: 1024px) {
+    /* Desktop vertical → nasconde e mostra responsive */
+    .bw-ps-vertical .bw-ps-thumbnails,
+    .bw-ps-vertical .bw-ps-main-images {
+        display: none;
+    }
+
+    .bw-ps-vertical .bw-ps-vertical-responsive {
+        display: block !important;
+    }
+
+    .bw-ps-popup-header {
+        padding: 15px 20px;
+    }
+
+    .bw-ps-popup-body {
+        padding: 20px 15px;
+    }
+}
+
+@media (max-width: 768px) {
+    /* Visibilità frecce/dots: gestita da CSS @media inline emesso da PHP (render_breakpoint_css).
+       Le regole specifiche per widget sovrascrivono questa regola generica grazie alla
+       specificità più alta (.elementor-element-X .bw-ps-arrows-container vs .bw-ps-arrows-container). */
+    .bw-ps-arrows-container {
+        bottom: 10px;
+        right: 10px;
+    }
+
+    .bw-ps-arrow {
+        padding: 8px;
+    }
+
+    .bw-ps-arrow svg {
+        width: 20px;
+        height: 20px;
+    }
+
+    .bw-ps-popup-image {
+        margin-bottom: 20px;
+    }
+
+    /* Cursore disabilitato su mobile */
+    .bw-ps-custom-cursor {
+        display: none !important;
+    }
+}
+
+/* ========================================
+   STATO CARICAMENTO
+   ======================================== */
+.bw-ps-wrapper.loading {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* ========================================
+   ACCESSIBILITÀ
+   ======================================== */
+.bw-ps-wrapper *:focus-visible:not(.bw-ps-popup-close) {
+    outline: 2px solid #0073aa;
+    outline-offset: 2px;
+}

@@ -1,0 +1,2589 @@
+(function initBwCheckout() {
+    'use strict';
+
+    // Debug flag — set window.BW_CHECKOUT_DEBUG = true in the browser console to enable logging
+    var BW_CHECKOUT_DEBUG = window.BW_CHECKOUT_DEBUG === true;
+
+    BW_CHECKOUT_DEBUG && console.log('[BW Checkout] IIFE started');
+
+    // Force execution even if there are errors in other scripts
+    var $ = window.jQuery;
+
+    if (!$) {
+        BW_CHECKOUT_DEBUG && console.log('[BW Checkout] jQuery not ready, will retry');
+        // jQuery not loaded, retry after short delay
+        setTimeout(initBwCheckout, 100);
+        return;
+    }
+
+    BW_CHECKOUT_DEBUG && console.log('[BW Checkout] jQuery is ready, continuing initialization');
+
+    function triggerCheckoutUpdate() {
+        if (window.jQuery && window.jQuery(document.body).trigger) {
+            window.jQuery(document.body).trigger('update_checkout');
+        }
+    }
+
+    function setOrderSummaryLoading(isLoading) {
+        var loaders = document.querySelectorAll('.bw-order-summary, .bw-checkout-left, .bw-checkout-right');
+
+        if (isLoading) {
+            loaders.forEach(function (el) { el.classList.add('is-loading'); });
+            if (window.BWLS && window.BWLS.startProgress) {
+                window.BWLS.startProgress();
+            }
+        } else {
+            loaders.forEach(function (el) { el.classList.remove('is-loading'); });
+            if (window.BWLS && window.BWLS.stopProgress) {
+                window.BWLS.stopProgress();
+            }
+        }
+    }
+
+    function updateQuantity(input, delta) {
+        var current = parseFloat(input.value || 0);
+        var step = parseFloat(input.getAttribute('step')) || 1;
+        var min = input.hasAttribute('min') ? parseFloat(input.getAttribute('min')) : 0;
+        var max = input.hasAttribute('max') ? parseFloat(input.getAttribute('max')) : Infinity;
+        var next = current + delta * step;
+
+        if (isNaN(next)) {
+            next = 0;
+        }
+
+        if (next < min) {
+            next = min;
+        }
+
+        if (next > max) {
+            next = max;
+        }
+
+        if (next !== current) {
+            input.value = next;
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    }
+
+    document.addEventListener('click', function (event) {
+        var button = event.target.closest('.bw-qty-btn');
+
+        if (button) {
+            var shell = button.closest('.bw-qty-shell');
+            var input = shell ? shell.querySelector('input.qty') : null;
+
+            if (!input) {
+                return;
+            }
+
+            var delta = button.classList.contains('bw-qty-btn--minus') ? -1 : 1;
+
+            // PROXY LOGIC: If this is the clone, operate on the original input
+            var panel = button.closest('#bw-order-summary-panel');
+            if (panel) {
+                var row = button.closest('[data-cart-item]');
+                var key = row ? row.getAttribute('data-cart-item') : null;
+                if (key) {
+                    var originalRow = document.querySelector('.woocommerce-checkout-review-order-table tr[data-cart-item="' + key + '"]');
+                    // Ensure we don't pick the clone itself (though selector limits to table usually, but querySelector finds first match)
+                    // The clone is inside .bw-order-summary-panel. The original is in .bw-checkout-right usually.
+                    // Safer: query outside panel.
+                    var allRows = document.querySelectorAll('tr[data-cart-item="' + key + '"]');
+                    for (var i = 0; i < allRows.length; i++) {
+                        if (!allRows[i].closest('#bw-order-summary-panel')) {
+                            originalRow = allRows[i];
+                            break;
+                        }
+                    }
+
+                    if (originalRow) {
+                        input = originalRow.querySelector('input.qty');
+                    }
+                }
+            }
+
+            updateQuantity(input, delta);
+            setOrderSummaryLoading(true);
+            return;
+        }
+
+        var remove = event.target.closest('.bw-review-item__remove, .bw-review-item__remove-text');
+
+        if (remove) {
+            event.preventDefault();
+
+            var item = remove.closest('[data-cart-item]');
+            var key = item ? item.getAttribute('data-cart-item') : null;
+
+            // Find original input/remove link
+            var originalItem = null;
+            if (key) {
+                var allRows = document.querySelectorAll('tr[data-cart-item="' + key + '"]');
+                for (var i = 0; i < allRows.length; i++) {
+                    if (!allRows[i].closest('#bw-order-summary-panel')) {
+                        originalItem = allRows[i];
+                        break;
+                    }
+                }
+            }
+
+            // Prefer updating Quantity to 0 over clicking link (more robust AJAX)
+            // But if there is no quantity input (sold individually?), fall back to link click.
+            var targetItem = originalItem || item;
+            var qtyInput = targetItem.querySelector('input.qty');
+
+            if (qtyInput) {
+                qtyInput.value = 0;
+                qtyInput.dispatchEvent(new Event('change', { bubbles: true }));
+                setOrderSummaryLoading(true);
+            } else {
+                // Proxy the click to the original link if we are in panel
+                if (remove.closest('#bw-order-summary-panel') && originalItem) {
+                    var originalLink = originalItem.querySelector('.bw-review-item__remove, .bw-review-item__remove-text');
+                    if (originalLink) {
+                        originalLink.click(); // Trigger native click on original
+                        setOrderSummaryLoading(true);
+                        return;
+                    }
+                }
+
+                // Fallback for non-ajax or standard behavior
+                window.location.href = remove.getAttribute('href');
+            }
+
+            return;
+        }
+
+        // Handle coupon removal via AJAX
+        var couponRemove = event.target.closest('.woocommerce-remove-coupon');
+
+        if (couponRemove) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            var couponCode = couponRemove.getAttribute('data-coupon');
+
+            if (!couponCode || !window.jQuery || !window.bwCheckoutParams) {
+                return;
+            }
+
+            setOrderSummaryLoading(true);
+
+            var $ = window.jQuery;
+
+            // RADICAL FIX: Remove coupon server-side, wait for confirmation, then do a FULL PAGE RELOAD
+            // This is the most reliable way to ensure session persistence without race conditions
+            // The page reload guarantees that the checkout fragments are generated with the updated session
+            $.ajax({
+                type: 'POST',
+                url: bwCheckoutParams.ajax_url,
+                timeout: 10000,
+                data: {
+                    action: 'bw_remove_coupon',
+                    nonce: bwCheckoutParams.nonce,
+                    coupon: couponCode
+                },
+                success: function (response) {
+                    if (response.success) {
+                        // Keep checkout state in-place and refresh totals via WooCommerce events.
+                        $(document.body).trigger('removed_coupon', [couponCode]);
+                        $(document.body).trigger('update_checkout');
+                    } else {
+                        setOrderSummaryLoading(false);
+                        showCouponMessage(response.data.message || 'Error removing coupon', 'error');
+                    }
+                },
+                error: function (jqXHR, textStatus) {
+                    setOrderSummaryLoading(false);
+                    if (textStatus === 'timeout') {
+                        showCouponMessage('Coupon removal timed out. Please try again.', 'error');
+                        return;
+                    }
+                    showCouponMessage('Error removing coupon', 'error');
+                }
+            });
+
+            return;
+        }
+    });
+
+    document.addEventListener('change', function (event) {
+        var qtyInput = event.target.closest('.bw-review-item input.qty');
+
+        if (!qtyInput) {
+            return;
+        }
+
+        triggerCheckoutUpdate();
+        setOrderSummaryLoading(true);
+    });
+
+    // Payment methods accordion logic moved to bw-payment-methods.js
+
+    // Store active message to persist through checkout updates
+    var activeCouponMessage = null;
+    var messageTimer = null;
+
+    function showCouponMessage(message, type) {
+        var messageEl = document.getElementById('bw-coupon-message');
+        if (!messageEl) {
+            return;
+        }
+
+        // Store message for persistence through DOM updates
+        activeCouponMessage = { message: message, type: type, timestamp: Date.now() };
+
+        // Clear any existing timer
+        if (messageTimer) {
+            clearTimeout(messageTimer);
+        }
+
+        // Show message
+        messageEl.className = 'bw-coupon-message ' + type;
+        messageEl.textContent = message;
+        messageEl.style.opacity = '1';
+
+        // Auto hide after 5 seconds with fade-out
+        messageTimer = setTimeout(function () {
+            messageEl.style.opacity = '0';
+            setTimeout(function () {
+                messageEl.className = 'bw-coupon-message';
+                messageEl.style.opacity = '';
+                activeCouponMessage = null;
+            }, 300); // Wait for fade-out animation
+        }, 5000);
+    }
+
+    function restoreCouponMessage() {
+        if (!activeCouponMessage) {
+            return;
+        }
+
+        // Only restore if message is less than 5 seconds old
+        var age = Date.now() - activeCouponMessage.timestamp;
+        if (age > 5000) {
+            activeCouponMessage = null;
+            return;
+        }
+
+        var messageEl = document.getElementById('bw-coupon-message');
+        if (!messageEl) {
+            return;
+        }
+
+        messageEl.className = 'bw-coupon-message ' + activeCouponMessage.type;
+        messageEl.textContent = activeCouponMessage.message;
+        messageEl.style.opacity = '1';
+
+        // Set remaining time for auto-hide
+        var remainingTime = 5000 - age;
+        if (messageTimer) {
+            clearTimeout(messageTimer);
+        }
+
+        messageTimer = setTimeout(function () {
+            messageEl.style.opacity = '0';
+            setTimeout(function () {
+                messageEl.className = 'bw-coupon-message';
+                messageEl.style.opacity = '';
+                activeCouponMessage = null;
+            }, 300);
+        }, remainingTime);
+    }
+
+    function getOrderTotalText() {
+        var totalEl = document.querySelector('.bw-checkout-right .order-total .amount') ||
+            document.querySelector('.woocommerce-checkout-review-order .order-total .amount');
+
+        if (!totalEl) {
+            return '';
+        }
+
+        return totalEl.textContent.trim();
+    }
+
+    function updateOrderSummaryTotals() {
+        var totalText = getOrderTotalText();
+
+        if (!totalText) {
+            return;
+        }
+
+        var toggleTotal = document.querySelector('.bw-order-summary-total');
+        if (toggleTotal) {
+            toggleTotal.textContent = totalText;
+        }
+
+        var mobileTotal = document.querySelector('.bw-mobile-total-amount');
+        if (mobileTotal) {
+            mobileTotal.textContent = totalText;
+        }
+    }
+
+    function initOrderSummaryToggle() {
+        var toggle = document.querySelector('.bw-order-summary-toggle');
+        if (!toggle) {
+            return;
+        }
+
+        toggle.addEventListener('click', function () {
+            var isOpen = document.body.classList.toggle('bw-order-summary-open');
+            toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        });
+    }
+
+    if (window.jQuery) {
+        window.jQuery(function ($) {
+            $(document.body)
+                .on('update_checkout wc_cart_emptied', function () {
+                    setOrderSummaryLoading(true);
+                })
+                .on('applied_coupon', function (event, couponCode) {
+                    setOrderSummaryLoading(true);
+                    showCouponMessage('Coupon code applied successfully', 'success');
+                })
+                .on('removed_coupon', function (event, couponCode) {
+                    // FIX: Don't set loading or show message here - it's already handled by our custom AJAX call
+                    // This event is triggered by our custom handler for integration with WooCommerce ecosystem
+                    // Just ensure loading state is set (in case called from elsewhere)
+                    setOrderSummaryLoading(true);
+                })
+                .on('updated_checkout', function () {
+                    setOrderSummaryLoading(false);
+                    // Restore coupon message if it was showing before update
+                    restoreCouponMessage();
+                    updateOrderSummaryTotals();
+                })
+                .on('checkout_error', function () {
+                    setOrderSummaryLoading(false);
+                });
+
+        });
+    }
+
+    // Custom sticky behavior for right column (desktop only)
+    function initCustomSticky() {
+        var BREAKPOINT = 900; // Match CSS @media breakpoint
+
+        var rightColumn = document.querySelector('.bw-checkout-right');
+        if (!rightColumn) {
+            return;
+        }
+
+        var parent = rightColumn.parentElement;
+        if (!parent) {
+            return;
+        }
+
+        // Get CSS variables
+        var style = window.getComputedStyle(rightColumn);
+        var stickyTop = parseInt(style.getPropertyValue('--bw-checkout-right-sticky-top')) || 20;
+        var marginTop = parseInt(style.getPropertyValue('--bw-checkout-right-margin-top')) || 0;
+
+        var initialOffset = null;
+        var isSticky = false;
+        var placeholder = null;
+
+        function isDesktop() {
+            return window.innerWidth >= BREAKPOINT;
+        }
+
+        function resetSticky() {
+            if (isSticky) {
+                rightColumn.style.position = '';
+                rightColumn.style.top = '';
+                rightColumn.style.left = '';
+                rightColumn.style.width = '';
+                rightColumn.style.marginTop = marginTop + 'px'; // Restore original margin-top
+                if (placeholder && placeholder.parentNode) {
+                    placeholder.parentNode.removeChild(placeholder);
+                    placeholder = null;
+                }
+                isSticky = false;
+            }
+        }
+
+        function calculateOffsets() {
+            // Reset to get accurate measurements
+            resetSticky();
+
+            var rect = rightColumn.getBoundingClientRect();
+            // Calculate where the column starts relative to the document
+            initialOffset = rect.top + window.pageYOffset;
+
+            return {
+                elementTop: rect.top,
+                elementLeft: rect.left,
+                elementWidth: rect.width
+            };
+        }
+
+        function onScroll() {
+            // Only apply sticky on desktop
+            if (!isDesktop()) {
+                resetSticky();
+                return;
+            }
+
+            if (initialOffset === null) {
+                calculateOffsets();
+            }
+
+            var scrollY = window.pageYOffset;
+            // When we scroll past the column's initial position minus the sticky offset, make it sticky
+            var threshold = initialOffset - stickyTop;
+
+            if (scrollY >= threshold && !isSticky) {
+                // Make it sticky
+                isSticky = true;
+
+                // Create placeholder to maintain layout
+                if (!placeholder) {
+                    placeholder = document.createElement('div');
+                    placeholder.style.height = rightColumn.offsetHeight + 'px';
+                    placeholder.style.width = rightColumn.offsetWidth + 'px';
+                    parent.insertBefore(placeholder, rightColumn);
+                }
+
+                var rect = rightColumn.getBoundingClientRect();
+                rightColumn.style.position = 'fixed';
+                rightColumn.style.top = stickyTop + 'px';
+                rightColumn.style.left = rect.left + 'px';
+                rightColumn.style.width = rect.width + 'px';
+                rightColumn.style.marginTop = '0';
+
+            } else if (scrollY < threshold && isSticky) {
+                // Return to normal
+                resetSticky();
+            }
+        }
+
+        function onResize() {
+            // Reset sticky if switching to mobile
+            if (!isDesktop()) {
+                resetSticky();
+                initialOffset = null;
+                return;
+            }
+
+            // Recalculate on desktop resize
+            initialOffset = null;
+            if (isSticky) {
+                calculateOffsets();
+                setTimeout(onScroll, 0);
+            }
+        }
+
+        // Initialize on load
+        setTimeout(function () {
+            calculateOffsets();
+            onScroll();
+        }, 100);
+
+        // Listen to scroll and resize
+        window.addEventListener('scroll', onScroll, { passive: true });
+        window.addEventListener('resize', onResize);
+
+        // Re-calculate on checkout update
+        if (window.jQuery) {
+            window.jQuery(document.body).on('updated_checkout', function () {
+                setTimeout(function () {
+                    initialOffset = null;
+                    calculateOffsets();
+                    onScroll();
+                }, 500);
+            });
+        }
+    }
+
+
+    // Fix Stripe error icon positioning (force inline layout with inline styles)
+    function fixStripeErrorLayout() {
+        // Find all Stripe error containers in both main DOM and shadow roots
+        var errorContainers = document.querySelectorAll('.Error, [class*="Error"]');
+
+        errorContainers.forEach(function (container) {
+            // Check if it's actually a Stripe error (has ErrorIcon and ErrorText)
+            var icon = container.querySelector('.ErrorIcon, [class*="ErrorIcon"]');
+            var text = container.querySelector('.ErrorText, [class*="ErrorText"]');
+
+            if (icon && text) {
+                // Force inline layout with inline styles using !important (overrides everything)
+                container.style.setProperty('display', 'flex', 'important');
+                container.style.setProperty('flex-direction', 'row', 'important');
+                container.style.setProperty('align-items', 'flex-start', 'important');
+                container.style.setProperty('gap', '8px', 'important');
+
+                icon.style.setProperty('display', 'inline-flex', 'important');
+                icon.style.setProperty('flex-shrink', '0', 'important');
+                icon.style.setProperty('width', '16px', 'important');
+                icon.style.setProperty('height', '16px', 'important');
+                icon.style.setProperty('margin', '2px 0 0 0', 'important');
+
+                text.style.setProperty('display', 'inline-block', 'important');
+                text.style.setProperty('flex', '1 1 auto', 'important');
+                text.style.setProperty('margin', '0', 'important');
+            }
+        });
+    }
+
+    // Run immediately and observe for new errors
+    function observeStripeErrors() {
+        // Run initial fix
+        fixStripeErrorLayout();
+
+        // Observe DOM changes to catch dynamically added errors
+        var observer = new MutationObserver(function (mutations) {
+            var shouldFix = false;
+            mutations.forEach(function (mutation) {
+                if (mutation.addedNodes.length > 0) {
+                    mutation.addedNodes.forEach(function (node) {
+                        if (node.nodeType === 1) { // Element node
+                            var hasError = node.matches && (
+                                node.matches('.Error, [class*="Error"]') ||
+                                node.querySelector('.Error, [class*="Error"]')
+                            );
+                            if (hasError) {
+                                shouldFix = true;
+                            }
+                        }
+                    });
+                }
+            });
+            if (shouldFix) {
+                setTimeout(fixStripeErrorLayout, 10);
+            }
+        });
+
+        // Observe the payment area for changes
+        var paymentArea = document.querySelector('.bw-checkout-payment, #payment');
+        if (paymentArea) {
+            observer.observe(paymentArea, {
+                childList: true,
+                subtree: true
+            });
+        }
+    }
+
+    BW_CHECKOUT_DEBUG && console.log('[BW Checkout] About to define initFloatingLabel');
+
+    // Floating label for coupon input - Supports multiple instances (desktop + mobile clone)
+    function initFloatingLabel(scope) {
+        var context = scope || document;
+
+        // Find inputs - handle compat with old ID or new class
+        var fields = context.querySelectorAll('.bw-coupon-code-input, #coupon_code, #coupon_code_mobile');
+
+        fields.forEach(function (couponInput) {
+            // Avoid re-initializing if already done on this specific element
+            if (couponInput.dataset.bwFloatingLabelInitialized) {
+                return;
+            }
+            couponInput.dataset.bwFloatingLabelInitialized = 'true';
+
+            var wrapper = couponInput.closest('.bw-coupon-input-wrapper');
+            var label = wrapper ? wrapper.querySelector('.bw-floating-label') : null;
+            // Find error div within the same container
+            var container = couponInput.closest('.checkout_coupon, .woocommerce-form-coupon');
+            var errorDiv = container ? container.querySelector('.bw-coupon-error') : null;
+
+            if (!wrapper || !label) {
+                BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Missing wrapper or label for input', couponInput);
+                return;
+            }
+
+            function updateHasValue() {
+                var hasValue = couponInput.value.trim() !== '';
+
+                // Debug mobile value detection removed
+
+                if (hasValue) {
+                    wrapper.classList.add('has-value');
+                    if (label.getAttribute('data-short')) {
+                        label.textContent = label.getAttribute('data-short');
+                    }
+                } else {
+                    wrapper.classList.remove('has-value');
+                    if (label.getAttribute('data-full')) {
+                        label.textContent = label.getAttribute('data-full');
+                    }
+                }
+            }
+
+            function clearError() {
+                if (errorDiv) {
+                    errorDiv.style.display = 'none';
+                    errorDiv.textContent = '';
+                }
+            }
+
+            function showError(message) {
+                if (errorDiv) {
+                    errorDiv.textContent = message;
+                    errorDiv.style.display = 'block';
+                }
+            }
+
+            // Check on input (and fallback events)
+            ['input', 'keyup', 'change'].forEach(function (evt) {
+                couponInput.addEventListener(evt, function () {
+                    // if (couponInput.closest('#bw-order-summary-panel')) {
+                    // console.log('[BW DEBUG] Event fired:', evt, couponInput.value);
+                    // }
+                    updateHasValue();
+                    clearError();
+                });
+            });
+
+            // Clear error on focus
+            couponInput.addEventListener('focus', clearError);
+
+            // Force initial check
+            updateHasValue();
+
+            // Expose update function for syncing
+            couponInput.updateHasValue = updateHasValue;
+
+            // Enter key - calls shared logic
+            couponInput.addEventListener('keypress', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleCouponSubmission(couponInput);
+                    return false;
+                }
+            });
+        });
+    }
+
+    // Global observer to decode HTML entities in error messages
+    function initEntityDecoder() {
+        function decodeEntitiesToText(value) {
+            var txt = document.createElement('textarea');
+            txt.innerHTML = value;
+            return txt.value;
+        }
+
+        function normalizeErrorNode(node) {
+            if (!node || node.nodeType !== 1) {
+                return;
+            }
+            var currentText = String(node.textContent || '');
+            if (currentText.indexOf('&quot;') === -1) {
+                return;
+            }
+            node.textContent = decodeEntitiesToText(currentText);
+        }
+
+        var observer = new MutationObserver(function (mutations) {
+            mutations.forEach(function (mutation) {
+                mutation.addedNodes.forEach(function (node) {
+                    if (node.nodeType === 1 && (node.className.includes('woocommerce-error') || node.className.includes('bw-coupon-error'))) {
+                        normalizeErrorNode(node);
+                    }
+                    // Also check children
+                    if (node.nodeType === 1 && node.querySelector('.woocommerce-error')) {
+                        var errs = node.querySelectorAll('.woocommerce-error');
+                        errs.forEach(function (err) {
+                            normalizeErrorNode(err);
+                        });
+                    }
+                });
+            });
+        });
+
+        observer.observe(document.body, { childList: true, subtree: true });
+    }
+
+    /**
+     * Standalone Coupon Submission Logic
+     * Handles AJAX and UI updates independent of element lifecycle
+     */
+    function handleCouponSubmission(inputElement) {
+        if (!inputElement) return;
+
+        BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Handling coupon submission for:', inputElement.id || 'unknown text input');
+
+        var couponCode = inputElement.value.trim();
+        var container = inputElement.closest('.checkout_coupon, .woocommerce-form-coupon, .bw-review-coupon') || inputElement.closest('.bw-coupon-fields');
+        // Try to find error div relative to input or container
+        var errorDiv = null;
+        if (container) errorDiv = container.querySelector('.bw-coupon-error');
+        if (!errorDiv && inputElement.closest('.bw-coupon-input-wrapper')) {
+            // Try searching nearby
+            var wrapper = inputElement.closest('.bw-coupon-input-wrapper');
+            if (wrapper && wrapper.parentElement) errorDiv = wrapper.parentElement.querySelector('.bw-coupon-error');
+        }
+
+        function showErr(msg) {
+            if (errorDiv) {
+                errorDiv.textContent = msg;
+                errorDiv.style.display = 'block';
+            } else {
+                // Fallback alert if IDK where to show it
+                alert(msg);
+            }
+        }
+
+        function clearErr() {
+            if (errorDiv) {
+                errorDiv.style.display = 'none';
+                errorDiv.textContent = '';
+            }
+        }
+
+        clearErr();
+
+        if (!couponCode) {
+            showErr('Please enter a coupon code');
+            return;
+        }
+
+        if (window.jQuery && window.bwCheckoutParams) {
+            setOrderSummaryLoading(true);
+
+            window.jQuery.ajax({
+                type: 'POST',
+                url: bwCheckoutParams.ajax_url,
+                timeout: 10000,
+                data: {
+                    action: 'bw_apply_coupon',
+                    nonce: bwCheckoutParams.nonce,
+                    coupon_code: couponCode
+                },
+                success: function (response) {
+                    if (response.success) {
+                        window.jQuery(document.body).trigger('update_checkout');
+                        showCouponMessage('Coupon applied successfully', 'success');
+
+                        // Sync UI across all inputs
+                        document.querySelectorAll('.bw-coupon-code-input, #coupon_code, #coupon_code_mobile').forEach(function (inp) {
+                            inp.value = '';
+                            if (inp.updateHasValue) inp.updateHasValue();
+                            inp.dispatchEvent(new Event('input'));
+                        });
+                    } else {
+                        setOrderSummaryLoading(false);
+                        var errorMessage = response.data && response.data.message
+                            ? response.data.message
+                            : 'Invalid coupon code';
+                        showErr(errorMessage);
+                    }
+                },
+                error: function (jqXHR, textStatus) {
+                    setOrderSummaryLoading(false);
+                    if (textStatus === 'timeout') {
+                        showErr('Coupon request timed out. Please try again.');
+                        return;
+                    }
+                    showErr('Error applying coupon.');
+                }
+            });
+        }
+    }
+
+    // ROBUST GLOBAL DELEGATION FOR APPLY BUTTON
+    // This survives cloning and DOM replacements
+    if (window.jQuery) {
+        // Unbind previous to avoid duplicates on re-load
+        jQuery(document.body).off('click.bwCoupon').on('click.bwCoupon', '.bw-apply-button', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            var button = this;
+            BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Global delegate caught click on:', button);
+
+            // Find valid input logic:
+            // 1. Sibling in flex container (Mobile/New)
+            // 2. Wrapped in paragraph (Desktop/Old)
+            // 3. Global ID search as fallback
+
+            var container = button.closest('.bw-coupon-fields') || button.closest('.checkout_coupon') || button.closest('.bw-review-coupon');
+            var input = null;
+
+            if (container) {
+                input = container.querySelector('.bw-coupon-code-input, #coupon_code, #coupon_code_mobile');
+            }
+
+            // Fallback: search siblings if container traversal failed
+            if (!input) {
+                var parent = button.parentElement;
+                if (parent) input = parent.querySelector('input[type="text"]');
+
+                if (!input) { // Try previous sibling (wrapper)
+                    var prev = button.previousElementSibling;
+                    if (prev) input = prev.querySelector('input[type="text"]');
+                }
+            }
+
+            if (input) {
+                handleCouponSubmission(input);
+            } else {
+                BW_CHECKOUT_DEBUG && console.error('[BW Checkout] Input not found for clicked button');
+                // Absolute last resort
+                var visibleInput = document.querySelector('.bw-coupon-code-input:not([type="hidden"])');
+                if (visibleInput && visibleInput.offsetParent !== null) {
+                    BW_CHECKOUT_DEBUG && console.log('Falling back to first visible input');
+                    handleCouponSubmission(visibleInput);
+                }
+            }
+        });
+    }
+
+    // Expose for debugging/manual re-init
+    window.bwInitFloatingLabel = initFloatingLabel;
+
+    var BW_PHONE_COUNTRIES = [
+        { iso: 'IT', dial: '39', flag: '🇮🇹', label: 'Italy' },
+        { iso: 'US', dial: '1', flag: '🇺🇸', label: 'United States' },
+        { iso: 'GB', dial: '44', flag: '🇬🇧', label: 'United Kingdom' },
+        { iso: 'DE', dial: '49', flag: '🇩🇪', label: 'Germany' },
+        { iso: 'FR', dial: '33', flag: '🇫🇷', label: 'France' },
+        { iso: 'ES', dial: '34', flag: '🇪🇸', label: 'Spain' },
+        { iso: 'NL', dial: '31', flag: '🇳🇱', label: 'Netherlands' },
+        { iso: 'BE', dial: '32', flag: '🇧🇪', label: 'Belgium' },
+        { iso: 'CH', dial: '41', flag: '🇨🇭', label: 'Switzerland' },
+        { iso: 'AT', dial: '43', flag: '🇦🇹', label: 'Austria' },
+        { iso: 'PT', dial: '351', flag: '🇵🇹', label: 'Portugal' },
+        { iso: 'IE', dial: '353', flag: '🇮🇪', label: 'Ireland' },
+        { iso: 'SE', dial: '46', flag: '🇸🇪', label: 'Sweden' },
+        { iso: 'NO', dial: '47', flag: '🇳🇴', label: 'Norway' },
+        { iso: 'DK', dial: '45', flag: '🇩🇰', label: 'Denmark' },
+        { iso: 'FI', dial: '358', flag: '🇫🇮', label: 'Finland' },
+        { iso: 'PL', dial: '48', flag: '🇵🇱', label: 'Poland' },
+        { iso: 'CZ', dial: '420', flag: '🇨🇿', label: 'Czech Republic' },
+        { iso: 'HU', dial: '36', flag: '🇭🇺', label: 'Hungary' },
+        { iso: 'RO', dial: '40', flag: '🇷🇴', label: 'Romania' },
+        { iso: 'GR', dial: '30', flag: '🇬🇷', label: 'Greece' },
+        { iso: 'HR', dial: '385', flag: '🇭🇷', label: 'Croatia' },
+        { iso: 'SI', dial: '386', flag: '🇸🇮', label: 'Slovenia' },
+        { iso: 'SK', dial: '421', flag: '🇸🇰', label: 'Slovakia' },
+        { iso: 'BG', dial: '359', flag: '🇧🇬', label: 'Bulgaria' },
+        { iso: 'EE', dial: '372', flag: '🇪🇪', label: 'Estonia' },
+        { iso: 'LV', dial: '371', flag: '🇱🇻', label: 'Latvia' },
+        { iso: 'LT', dial: '370', flag: '🇱🇹', label: 'Lithuania' },
+        { iso: 'TR', dial: '90', flag: '🇹🇷', label: 'Turkey' },
+        { iso: 'UA', dial: '380', flag: '🇺🇦', label: 'Ukraine' },
+        { iso: 'CA', dial: '1', flag: '🇨🇦', label: 'Canada' },
+        { iso: 'AU', dial: '61', flag: '🇦🇺', label: 'Australia' },
+        { iso: 'NZ', dial: '64', flag: '🇳🇿', label: 'New Zealand' },
+        { iso: 'JP', dial: '81', flag: '🇯🇵', label: 'Japan' },
+        { iso: 'CN', dial: '86', flag: '🇨🇳', label: 'China' },
+        { iso: 'IN', dial: '91', flag: '🇮🇳', label: 'India' },
+        { iso: 'BR', dial: '55', flag: '🇧🇷', label: 'Brazil' },
+        { iso: 'MX', dial: '52', flag: '🇲🇽', label: 'Mexico' },
+        { iso: 'AR', dial: '54', flag: '🇦🇷', label: 'Argentina' },
+        { iso: 'CL', dial: '56', flag: '🇨🇱', label: 'Chile' },
+        { iso: 'CO', dial: '57', flag: '🇨🇴', label: 'Colombia' },
+        { iso: 'PE', dial: '51', flag: '🇵🇪', label: 'Peru' },
+        { iso: 'ZA', dial: '27', flag: '🇿🇦', label: 'South Africa' },
+        { iso: 'AE', dial: '971', flag: '🇦🇪', label: 'United Arab Emirates' },
+        { iso: 'SA', dial: '966', flag: '🇸🇦', label: 'Saudi Arabia' },
+        { iso: 'IL', dial: '972', flag: '🇮🇱', label: 'Israel' }
+    ];
+    var BW_PHONE_MAX_E164_DIGITS = 15;
+
+    function bwFindCountryByIso(iso) {
+        if (!iso) return null;
+        var upper = String(iso).toUpperCase();
+        for (var i = 0; i < BW_PHONE_COUNTRIES.length; i++) {
+            if (BW_PHONE_COUNTRIES[i].iso === upper) {
+                return BW_PHONE_COUNTRIES[i];
+            }
+        }
+        return null;
+    }
+
+    function bwDetectDialCode(value) {
+        if (!value || value.charAt(0) !== '+') return null;
+        var digits = value.replace(/[^\d+]/g, '');
+        var best = null;
+
+        for (var i = 0; i < BW_PHONE_COUNTRIES.length; i++) {
+            var dial = BW_PHONE_COUNTRIES[i].dial;
+            if (digits.indexOf('+' + dial) === 0) {
+                if (!best || dial.length > best.length) {
+                    best = dial;
+                }
+            }
+        }
+        return best;
+    }
+
+    function bwStripCurrentDialPrefix(value) {
+        var cleaned = (value || '').trim();
+        if (cleaned.charAt(0) !== '+') {
+            return cleaned;
+        }
+
+        var detected = bwDetectDialCode(cleaned);
+        if (!detected) {
+            return cleaned.replace(/^\+\d+\s*/, '').trim();
+        }
+
+        var regex = new RegExp('^\\+' + detected + '\\s*');
+        return cleaned.replace(regex, '').trim();
+    }
+
+    function bwGetNationalMaxDigits(dial) {
+        var max = BW_PHONE_MAX_E164_DIGITS - String(dial || '').length;
+        return max > 0 ? max : BW_PHONE_MAX_E164_DIGITS;
+    }
+
+    function bwGetNationalDigits(value) {
+        return (value || '').replace(/\D/g, '');
+    }
+
+    function bwFormatPhoneValue(dial, nationalDigits) {
+        var cleanDial = String(dial || '').replace(/\D/g, '');
+        var cleanNational = bwGetNationalDigits(nationalDigits).slice(0, bwGetNationalMaxDigits(cleanDial));
+        return '+' + cleanDial + (cleanNational ? ' ' + cleanNational : ' ');
+    }
+
+    function bwApplyDialPrefix(input, dial, keepNational) {
+        if (!input || !dial) return;
+
+        var national = keepNational ? bwStripCurrentDialPrefix(input.value) : '';
+        input.value = bwFormatPhoneValue(dial, national);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    function initBillingPhoneCountryPicker(wrapper, input, fieldRow) {
+        if (!wrapper || !input || !fieldRow) return;
+        if (wrapper.querySelector('.bw-phone-country')) return;
+        if (fieldRow.querySelector('.iti, .iti__flag-container, .iti--allow-dropdown')) return;
+
+        var billingCountrySelect = document.getElementById('billing_country');
+        var defaultCountry = bwFindCountryByIso(billingCountrySelect ? billingCountrySelect.value : '') || bwFindCountryByIso('IT');
+        var detectedDial = bwDetectDialCode(input.value);
+
+        var picker = document.createElement('select');
+        picker.className = 'bw-phone-country';
+        picker.setAttribute('aria-label', 'Phone country code');
+        var selectedFlag = document.createElement('span');
+        selectedFlag.className = 'bw-phone-country-flag';
+        selectedFlag.setAttribute('aria-hidden', 'true');
+
+        BW_PHONE_COUNTRIES.forEach(function (country) {
+            var option = document.createElement('option');
+            option.value = country.dial;
+            option.setAttribute('data-iso', country.iso);
+            option.setAttribute('data-flag', country.flag);
+            option.textContent = country.label + '(+' + country.dial + ')';
+            picker.appendChild(option);
+        });
+
+        var initialDial = detectedDial || (defaultCountry ? defaultCountry.dial : '39');
+        picker.value = initialDial;
+        wrapper.appendChild(selectedFlag);
+        wrapper.appendChild(picker);
+
+        input.setAttribute('inputmode', 'numeric');
+        input.setAttribute('autocomplete', 'tel-national');
+        input.setAttribute('pattern', '[0-9]*');
+        input.setAttribute('maxlength', String(BW_PHONE_MAX_E164_DIGITS + 2)); // + and space
+
+        function sanitizePhoneValue() {
+            var dial = picker.value || initialDial;
+            var hasPrefix = (input.value || '').trim().charAt(0) === '+';
+            var national = hasPrefix ? bwStripCurrentDialPrefix(input.value) : input.value;
+            input.value = bwFormatPhoneValue(dial, national);
+        }
+
+        function syncSelectedFlag() {
+            var current = null;
+            for (var i = 0; i < BW_PHONE_COUNTRIES.length; i++) {
+                if (BW_PHONE_COUNTRIES[i].dial === picker.value) {
+                    current = BW_PHONE_COUNTRIES[i];
+                    break;
+                }
+            }
+            selectedFlag.textContent = current ? current.flag : '🌐';
+        }
+
+        if (!input.value || input.value.trim() === '') {
+            bwApplyDialPrefix(input, initialDial, false);
+        } else if (detectedDial && picker.value !== detectedDial) {
+            picker.value = detectedDial;
+        }
+        syncSelectedFlag();
+
+        picker.addEventListener('change', function () {
+            syncSelectedFlag();
+            bwApplyDialPrefix(input, picker.value, true);
+        });
+
+        input.addEventListener('input', sanitizePhoneValue);
+        input.addEventListener('paste', function () {
+            setTimeout(sanitizePhoneValue, 0);
+        });
+
+        input.addEventListener('blur', function () {
+            if (!input.value || input.value.trim() === '') {
+                bwApplyDialPrefix(input, picker.value || initialDial, false);
+                return;
+            }
+
+            var detected = bwDetectDialCode(input.value);
+            if (!detected) {
+                bwApplyDialPrefix(input, picker.value || initialDial, true);
+                return;
+            }
+
+            if (picker.value !== detected) {
+                picker.value = detected;
+                syncSelectedFlag();
+            }
+
+            sanitizePhoneValue();
+        });
+    }
+
+    /**
+     * Transform checkout fields into floating label fields
+     */
+    function initCheckoutFloatingLabels() {
+        BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Initializing floating labels');
+
+        // Target checkout form fields (including select dropdowns)
+        var fieldSelectors = [
+            '#billing_first_name',
+            '#billing_last_name',
+            '#billing_company',
+            '#billing_country',
+            '#billing_state',
+            '#billing_address_1',
+            '#billing_address_2',
+            '#billing_city',
+            '#billing_postcode',
+            '#billing_phone',
+            '#billing_email',
+            '#shipping_first_name',
+            '#shipping_last_name',
+            '#shipping_company',
+            '#shipping_country',
+            '#shipping_state',
+            '#shipping_address_1',
+            '#shipping_address_2',
+            '#shipping_city',
+            '#shipping_postcode'
+        ];
+
+        fieldSelectors.forEach(function (selector) {
+            var input = document.querySelector(selector);
+            if (!input) return;
+
+            // Skip if already wrapped
+            if (input.closest('.bw-field-wrapper')) return;
+
+            // Get field label text
+            var fieldRow = input.closest('.form-row');
+            if (!fieldRow) return;
+
+            var originalLabel = fieldRow.querySelector('label[for="' + input.id + '"]');
+            if (!originalLabel) return;
+
+            // Get clean label text (remove asterisks, abbr, optional text, etc.)
+            var labelClone = originalLabel.cloneNode(true);
+            // Remove abbr (asterisks), optional spans, and other non-text elements
+            var elemsToRemove = labelClone.querySelectorAll('abbr, .optional, .required');
+            elemsToRemove.forEach(function (elem) { elem.remove(); });
+            var labelText = labelClone.textContent.replace(/\*/g, '').trim();
+            var isBillingPhone = input.id === 'billing_phone';
+
+            if (isBillingPhone) {
+                labelText = 'Mobile phone (optional)';
+            }
+
+            if (!labelText) return;
+
+            // Check if this is a Select2 field
+            var isSelect2 = input.tagName === 'SELECT' && input.classList.contains('select2-hidden-accessible');
+            var elementToWrap = input;
+
+            // For Select2, wrap the .select2-container instead of the hidden select
+            if (isSelect2) {
+                var select2Container = fieldRow.querySelector('.select2-container');
+                if (select2Container) {
+                    elementToWrap = select2Container;
+                }
+            }
+
+            // Skip if element to wrap is already inside a wrapper
+            if (elementToWrap.closest('.bw-field-wrapper')) return;
+
+            // Wrap input/select2 with floating label structure
+            var wrapper = document.createElement('span');
+            wrapper.className = 'bw-field-wrapper';
+
+            // Create floating label
+            var floatingLabel = document.createElement('label');
+            floatingLabel.className = 'bw-floating-label';
+            floatingLabel.setAttribute('for', input.id);
+            floatingLabel.textContent = labelText;
+
+            // Insert wrapper before element
+            elementToWrap.parentNode.insertBefore(wrapper, elementToWrap);
+            wrapper.appendChild(elementToWrap);
+
+            if (isBillingPhone) {
+                wrapper.classList.add('bw-field-wrapper--phone');
+
+                var phoneIcon = document.createElement('span');
+                phoneIcon.className = 'bw-phone-icon';
+                phoneIcon.setAttribute('aria-hidden', 'true');
+                phoneIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 14 14" role="img"><path d="M3.25 3.25c0-.966.784-1.75 1.75-1.75h4c.966 0 1.75.784 1.75 1.75v7.5A1.75 1.75 0 0 1 9 12.5H5a1.75 1.75 0 0 1-1.75-1.75z" fill="none" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/><path d="M6 10.5h2" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 2h2" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg>';
+                wrapper.appendChild(phoneIcon);
+                initBillingPhoneCountryPicker(wrapper, input, fieldRow);
+            }
+
+            wrapper.appendChild(floatingLabel);
+
+            // For Select2, also move the hidden select into wrapper
+            if (isSelect2 && elementToWrap !== input) {
+                wrapper.appendChild(input);
+            }
+
+            // Hide original label
+            if (originalLabel) {
+                originalLabel.style.display = 'none';
+            }
+
+            // Add has-floating-label class to form-row
+            fieldRow.classList.add('bw-has-floating-label');
+
+            // Function to update has-value class
+            function updateHasValue() {
+                var hasValue = input.value && input.value.trim() !== '';
+
+                if (hasValue) {
+                    wrapper.classList.add('has-value');
+                } else {
+                    wrapper.classList.remove('has-value');
+                }
+            }
+
+            // Listen to appropriate events based on field type
+            if (isSelect2) {
+                // Select2 events
+                if (window.jQuery) {
+                    jQuery(input).on('select2:select select2:clear change', updateHasValue);
+                }
+            } else {
+                // Standard input events
+                input.addEventListener('input', updateHasValue);
+                input.addEventListener('blur', updateHasValue);
+                input.addEventListener('change', updateHasValue);
+            }
+
+            // Check initial value
+            updateHasValue();
+        });
+
+        BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Floating labels initialized');
+    }
+
+    /**
+     * Initialize Google Places Autocomplete (if enabled)
+     */
+    function initGooglePlacesAutocomplete() {
+        // Check if Google Maps is enabled
+        if (!window.bwGoogleMapsSettings || !window.bwGoogleMapsSettings.enabled) {
+            BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Google Maps not enabled');
+            return;
+        }
+
+        // Check if Google Maps API is loaded
+        if (typeof google === 'undefined' || !google.maps || !google.maps.places) {
+            BW_CHECKOUT_DEBUG && console.warn('[BW Checkout] Google Maps API not loaded');
+            return;
+        }
+
+        BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Initializing Google Places Autocomplete');
+
+        var addressInputs = [
+            document.getElementById('billing_address_1'),
+            document.getElementById('shipping_address_1')
+        ].filter(function (input) {
+            return !!input;
+        });
+
+        if (!addressInputs.length) {
+            BW_CHECKOUT_DEBUG && console.warn('[BW Checkout] Address input not found');
+            return;
+        }
+
+        if (!window.bwGoogleAutocompleteInstances) {
+            window.bwGoogleAutocompleteInstances = {};
+        }
+
+        addressInputs.forEach(function (addressInput) {
+            var fieldPrefix = addressInput.id.indexOf('shipping_') === 0 ? 'shipping' : 'billing';
+            var countrySelect = document.querySelector('select[name="' + fieldPrefix + '_country"]');
+            var selectedCountry = countrySelect ? countrySelect.value : '';
+            var existing = window.bwGoogleAutocompleteInstances[addressInput.id];
+
+            if (existing && existing.countrySelect && existing.countryHandler) {
+                existing.countrySelect.removeEventListener('change', existing.countryHandler);
+            }
+            if (existing && existing.autocomplete && google.maps && google.maps.event) {
+                google.maps.event.clearInstanceListeners(existing.autocomplete);
+            }
+
+            var options = {
+                types: ['address'],
+                fields: ['address_components', 'formatted_address', 'geometry']
+            };
+
+            if (window.bwGoogleMapsSettings.restrictToCountry && selectedCountry) {
+                options.componentRestrictions = {
+                    country: selectedCountry.toLowerCase()
+                };
+            }
+
+            var autocomplete = new google.maps.places.Autocomplete(addressInput, options);
+
+            autocomplete.addListener('place_changed', function () {
+                var place = autocomplete.getPlace();
+
+                if (!place.address_components) {
+                    BW_CHECKOUT_DEBUG && console.warn('[BW Checkout] No address components found');
+                    return;
+                }
+
+                BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Place selected:', place);
+
+                var addressData = {
+                    street: '',
+                    city: '',
+                    postcode: '',
+                    state: '',
+                    country: ''
+                };
+
+                place.address_components.forEach(function (component) {
+                    var types = component.types;
+
+                    if (types.includes('street_number')) {
+                        addressData.street = component.long_name + ' ';
+                    }
+                    if (types.includes('route')) {
+                        addressData.street += component.long_name;
+                    }
+                    if (types.includes('locality') || types.includes('postal_town')) {
+                        addressData.city = component.long_name;
+                    }
+                    if (types.includes('postal_code')) {
+                        addressData.postcode = component.long_name;
+                    }
+                    if (types.includes('administrative_area_level_1')) {
+                        addressData.state = component.short_name;
+                    }
+                    if (types.includes('country')) {
+                        addressData.country = component.short_name;
+                    }
+                });
+
+                if (addressData.street) {
+                    addressInput.value = addressData.street.trim();
+                    if (window.jQuery) {
+                        jQuery(addressInput).trigger('change');
+                    }
+                }
+
+                if (window.bwGoogleMapsSettings.autoFillCityPostcode) {
+                    if (addressData.city) {
+                        var cityInput = document.getElementById(fieldPrefix + '_city');
+                        if (cityInput) {
+                            cityInput.value = addressData.city;
+                            if (window.jQuery) {
+                                jQuery(cityInput).trigger('change');
+                            }
+                        }
+                    }
+
+                    if (addressData.postcode) {
+                        var postcodeInput = document.getElementById(fieldPrefix + '_postcode');
+                        if (postcodeInput) {
+                            postcodeInput.value = addressData.postcode;
+                            if (window.jQuery) {
+                                jQuery(postcodeInput).trigger('change');
+                            }
+                        }
+                    }
+                }
+
+                setTimeout(function () {
+                    initCheckoutFloatingLabels();
+                }, 100);
+
+                if (window.jQuery) {
+                    jQuery(document.body).trigger('update_checkout');
+                }
+            });
+
+            var countryHandler = null;
+            if (countrySelect && window.bwGoogleMapsSettings.restrictToCountry) {
+                countryHandler = function () {
+                    var newCountry = this.value;
+                    if (newCountry) {
+                        autocomplete.setComponentRestrictions({
+                            country: newCountry.toLowerCase()
+                        });
+                        BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Google Places country restriction updated:', newCountry);
+                    }
+                };
+                countrySelect.addEventListener('change', countryHandler);
+            }
+
+            window.bwGoogleAutocompleteInstances[addressInput.id] = {
+                autocomplete: autocomplete,
+                countrySelect: countrySelect,
+                countryHandler: countryHandler
+            };
+        });
+
+        BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Google Places Autocomplete initialized');
+    }
+
+    /**
+     * Move "Delivery" section heading below newsletter checkbox.
+     * This creates a visual separation between Contact section and Delivery section.
+     */
+    function moveDeliveryHeading() {
+        var newsletterField = document.getElementById('bw_subscribe_newsletter_field');
+        if (!newsletterField) {
+            return;
+        }
+
+        // Try multiple selectors to find the Delivery heading
+        var deliveryHeading = document.querySelector('.checkout-delivery-title') ||
+            document.querySelector('.bw-checkout-section-heading--delivery') ||
+            document.querySelector('h2.checkout-section-title');
+
+        // If not found by class, try finding by text content
+        if (!deliveryHeading) {
+            var allHeadings = document.querySelectorAll('h2, h3, .checkout-section-title');
+            for (var i = 0; i < allHeadings.length; i++) {
+                if (allHeadings[i].textContent.trim().toLowerCase() === 'delivery') {
+                    deliveryHeading = allHeadings[i];
+                    break;
+                }
+            }
+        }
+
+        // New billing/shipping architecture keeps Delivery heading in shipping section.
+        // Do not move it if it's already inside shipping fields.
+        if (deliveryHeading && deliveryHeading.closest('.woocommerce-shipping-fields')) {
+            deliveryHeading.classList.add('bw-delivery-section-title');
+            return;
+        }
+
+        if (deliveryHeading) {
+            // Add class for styling
+            deliveryHeading.classList.add('bw-delivery-section-title');
+
+            // Move the heading (and its wrapper if it has one) after the newsletter field
+            var headingToMove = deliveryHeading.closest('.bw-checkout-section-heading') || deliveryHeading;
+
+            // Add class to wrapper if it exists
+            if (headingToMove.classList.contains('bw-checkout-section-heading')) {
+                headingToMove.classList.add('bw-checkout-section-heading--delivery');
+            }
+
+            // Insert after newsletter field
+            if (newsletterField.nextSibling) {
+                newsletterField.parentNode.insertBefore(headingToMove, newsletterField.nextSibling);
+            } else {
+                newsletterField.parentNode.appendChild(headingToMove);
+            }
+
+            BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Delivery heading moved below newsletter checkbox');
+        }
+    }
+
+    /**
+     * Shipping details accordion behavior:
+     * - "Same as billing details" => shipping fields hidden and synced from billing.
+     * - "Use a different shipping address" => shipping fields accordion visible.
+     */
+    function initBillingAddressAccordion() {
+        var section = document.querySelector('.bw-billing-address');
+        if (!section) {
+            return;
+        }
+
+        var options = section.querySelectorAll('input[name="bw_shipping_address_mode"]');
+        var accordion = section.querySelector('.bw-billing-address__accordion');
+        var form = document.querySelector('form.checkout');
+
+        if (!options.length || !accordion) {
+            return;
+        }
+
+        function getSelectedMode() {
+            var checked = section.querySelector('input[name="bw_shipping_address_mode"]:checked');
+            return checked ? checked.value : (section.getAttribute('data-default-mode') || 'same');
+        }
+
+        function syncShippingFromBilling() {
+            var mode = getSelectedMode();
+            if (mode === 'different') {
+                return;
+            }
+
+            var map = {
+                billing_first_name: 'shipping_first_name',
+                billing_last_name: 'shipping_last_name',
+                billing_company: 'shipping_company',
+                billing_country: 'shipping_country',
+                billing_address_1: 'shipping_address_1',
+                billing_address_2: 'shipping_address_2',
+                billing_postcode: 'shipping_postcode',
+                billing_city: 'shipping_city',
+                billing_state: 'shipping_state'
+            };
+
+            Object.keys(map).forEach(function (billingKey) {
+                var shippingKey = map[billingKey];
+                var billingField = document.querySelector('[name="' + billingKey + '"]');
+                var shippingField = document.querySelector('[name="' + shippingKey + '"]');
+
+                if (!billingField || !shippingField) {
+                    return;
+                }
+
+                var billingValue = billingField.value;
+                if (typeof billingValue === 'undefined') {
+                    return;
+                }
+
+                if (shippingField.value !== billingValue) {
+                    shippingField.value = billingValue;
+                    shippingField.dispatchEvent(new Event('input', { bubbles: true }));
+                    shippingField.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            });
+        }
+
+        function applyMode(mode, shouldTriggerUpdate) {
+            var isDifferent = mode === 'different';
+            section.classList.toggle('is-different', isDifferent);
+            accordion.setAttribute('aria-hidden', isDifferent ? 'false' : 'true');
+            if (window.jQuery) {
+                var $accordion = window.jQuery(accordion);
+                if (isDifferent) {
+                    $accordion.stop(true, true).slideDown(220);
+                } else {
+                    $accordion.stop(true, true).slideUp(220);
+                }
+            } else {
+                accordion.style.display = isDifferent ? 'block' : 'none';
+            }
+
+            if (!isDifferent) {
+                syncShippingFromBilling();
+            }
+
+            if (shouldTriggerUpdate && window.jQuery) {
+                window.jQuery(document.body).trigger('update_checkout');
+            }
+        }
+
+        options.forEach(function (radio) {
+            radio.addEventListener('change', function () {
+                if (radio.checked) {
+                    applyMode(radio.value, true);
+                }
+            });
+        });
+
+        var billingFields = document.querySelectorAll(
+            '.woocommerce-billing-fields__field-wrapper input, .woocommerce-billing-fields__field-wrapper select, .woocommerce-billing-fields__field-wrapper textarea'
+        );
+
+        billingFields.forEach(function (field) {
+            field.addEventListener('input', syncShippingFromBilling);
+            field.addEventListener('change', syncShippingFromBilling);
+        });
+
+        if (form && !form.hasAttribute('data-bw-billing-submit-bound')) {
+            form.setAttribute('data-bw-billing-submit-bound', '1');
+            form.addEventListener('submit', function () {
+                syncShippingFromBilling();
+            });
+        }
+
+        applyMode(getSelectedMode(), false);
+    }
+
+    /**
+     * Detect if order total is 0 and toggle free order UI.
+     * Shows free order banner, hides express buttons and divider.
+     * Creates banner dynamically if it doesn't exist during AJAX updates.
+     */
+    function detectFreeOrder() {
+        // Try multiple selectors for order total
+        var totalElement = document.querySelector('.order-total .woocommerce-Price-amount') ||
+            document.querySelector('.order-total .amount') ||
+            document.querySelector('.cart-subtotal .woocommerce-Price-amount');
+
+        if (!totalElement) {
+            BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Total element not found, cannot detect free order');
+            return;
+        }
+
+        var totalText = totalElement.textContent || totalElement.innerText || '';
+        // Remove currency symbols, spaces, and parse
+        var totalValue = parseFloat(totalText.replace(/[^\d.,]/g, '').replace(',', '.'));
+
+        BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Detected total value:', totalValue);
+
+        var body = document.body;
+        var isFree = totalValue === 0 || isNaN(totalValue) && totalText.includes('0');
+
+        // Find or create banner and divider
+        var banner = document.querySelector('.bw-free-order-banner');
+        var divider = document.querySelector('.bw-express-divider');
+        // Target all potential Stripe / WCPay express wrappers
+        var expressCheckoutNodes = document.querySelectorAll(
+            '#wc-stripe-payment-request-wrapper, #wc-stripe-express-checkout-element, #wcpay-express-checkout-element, #wc-stripe-express-checkout-element-wrapper, .wcpay-express-checkout-wrapper'
+        );
+
+        if (isFree) {
+            body.classList.add('bw-free-order');
+
+            // Create banner if it doesn't exist
+            if (!banner) {
+                banner = createFreeOrderBanner();
+
+                // Insert in same position as divider if divider exists
+                if (divider && divider.parentNode) {
+                    divider.parentNode.insertBefore(banner, divider);
+                    BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Free order banner created before divider');
+                } else {
+                    // Otherwise insert before customer details or express checkout
+                    var insertPoint = document.querySelector('.woocommerce-billing-fields') ||
+                        document.querySelector('#customer_details') ||
+                        expressCheckoutNodes[0];
+
+                    if (insertPoint && insertPoint.parentNode) {
+                        insertPoint.parentNode.insertBefore(banner, insertPoint);
+                        BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Free order banner created and inserted before customer details');
+                    }
+                }
+            }
+
+            // Show banner if it exists
+            if (banner) {
+                banner.classList.add('bw-free-order-active');
+                banner.style.display = 'block';
+            }
+
+            // Hide divider if it exists
+            if (divider) {
+                divider.style.display = 'none';
+            }
+
+            // Hide Express Checkout on free order
+            expressCheckoutNodes.forEach(function (node) {
+                node.style.display = 'none';
+            });
+            // Also hide all known separators
+            var separators = document.querySelectorAll('#wc-stripe-payment-request-button-separator, #wc-stripe-express-checkout-button-separator, #wcpay-express-checkout-button-separator');
+            separators.forEach(function (s) { s.style.display = 'none'; });
+
+            // Update button text for free order
+            updatePlaceOrderButton(true);
+
+            BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Free order detected, UI updated');
+        } else {
+            body.classList.remove('bw-free-order');
+
+            // Hide banner if it exists
+            if (banner) {
+                banner.classList.remove('bw-free-order-active');
+                banner.style.display = 'none';
+            }
+
+            // Show divider if it exists
+            if (divider) {
+                divider.style.display = '';
+            }
+
+            // Show Express Checkout on paid order
+            // Clear inline display to let CSS handle layout (flex for 2-column buttons)
+            expressCheckoutNodes.forEach(function (node) {
+                node.style.removeProperty('display');
+            });
+            // Native Stripe separators are hidden via CSS - we use custom divider
+            var separators = document.querySelectorAll('#wc-stripe-payment-request-button-separator, #wc-stripe-express-checkout-button-separator, #wcpay-express-checkout-button-separator');
+            separators.forEach(function (s) { s.style.display = 'none'; });
+
+            // Restore original button text
+            updatePlaceOrderButton(false);
+
+            BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Paid order detected, UI updated');
+        }
+    }
+
+    /**
+     * Update Place Order button text based on free order state.
+     * Stores original button text on first call to restore it later.
+     *
+     * @param {boolean} isFree - Whether order is free (total = 0)
+     */
+    function updatePlaceOrderButton(isFree) {
+        // Find Place Order button
+        var button = document.querySelector('#place_order') ||
+            document.querySelector('.woocommerce-checkout button[type="submit"]');
+
+        if (!button) {
+            return;
+        }
+
+        // Store original button text on first call
+        if (!button.hasAttribute('data-original-text')) {
+            var originalText = button.textContent || button.innerText || button.value;
+            button.setAttribute('data-original-text', originalText);
+            BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Stored original button text:', originalText);
+        }
+
+        if (isFree) {
+            // Set free order button text
+            var freeText = window.bwCheckoutParams && window.bwCheckoutParams.freeOrderButtonText
+                ? window.bwCheckoutParams.freeOrderButtonText
+                : 'Confirm free order';
+
+            button.textContent = freeText;
+            if (button.value) {
+                button.value = freeText;
+            }
+            BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Button text changed to:', freeText);
+        } else {
+            // Restore original button text
+            var originalText = button.getAttribute('data-original-text');
+            if (originalText) {
+                button.textContent = originalText;
+                if (button.value) {
+                    button.value = originalText;
+                }
+                BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Button text restored to:', originalText);
+            }
+        }
+    }
+
+    /**
+     * Create free order banner HTML dynamically.
+     *
+     * @return {HTMLElement}
+     */
+    function createFreeOrderBanner() {
+        var banner = document.createElement('div');
+        banner.className = 'bw-free-order-banner bw-free-order-active';
+
+        var content = document.createElement('div');
+        content.className = 'bw-free-order-banner__content';
+
+        // Get message from localized data or use default
+        var messageText = window.bwCheckoutParams && window.bwCheckoutParams.freeOrderMessage
+            ? window.bwCheckoutParams.freeOrderMessage
+            : 'Your order is free. Complete your details and click Place order.';
+        // Normalize configured HTML into plain text for a clean banner.
+        var tmp = document.createElement('div');
+        tmp.innerHTML = messageText;
+        messageText = (tmp.textContent || tmp.innerText || '').trim() || 'Your order is free. Complete your details and click Place order.';
+
+        var p = document.createElement('p');
+        p.className = 'bw-free-order-banner__text';
+        p.textContent = messageText;
+        content.appendChild(p);
+        banner.appendChild(content);
+
+        return banner;
+    }
+
+    /**
+     * Hide section headings based on body classes.
+     */
+    function hideSectionHeadings() {
+        var body = document.body;
+
+        // Hide Billing Details heading
+        if (body.classList.contains('bw-hide-billing-heading')) {
+            var billingHeadings = document.querySelectorAll('.woocommerce-billing-fields h3, .woocommerce-billing-fields__field-wrapper h3');
+            billingHeadings.forEach(function (heading) {
+                var text = heading.textContent.trim().toLowerCase();
+                if (text.includes('billing') || text.includes('fatturazione') || text.includes('dati di fatturazione')) {
+                    heading.style.display = 'none';
+                }
+            });
+        }
+
+        // Hide Additional Information heading
+        if (body.classList.contains('bw-hide-additional-heading')) {
+            var additionalHeadings = document.querySelectorAll('.woocommerce-additional-fields h3, .woocommerce-additional-fields__field-wrapper h3');
+            additionalHeadings.forEach(function (heading) {
+                var text = heading.textContent.trim().toLowerCase();
+                if (text.includes('additional') || text.includes('aggiuntiv') || text.includes('note')) {
+                    heading.style.display = 'none';
+                }
+            });
+        }
+    }
+
+    /**
+     * Initialize mobile order summary accordion.
+     * Creates toggle bar and wraps right column for mobile view.
+     * ONLY runs on mobile/tablet (≤900px).
+     */
+    function initMobileOrderSummary() {
+        BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Initializing mobile order summary accordion');
+
+        // Only run on mobile/tablet screens (≤900px)
+        if (window.innerWidth > 900) {
+            BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Desktop view detected, skipping mobile accordion');
+            return;
+        }
+
+        var rightColumn = document.querySelector('.bw-checkout-right');
+        if (!rightColumn) {
+            BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Right column not found, skipping mobile summary init');
+            return;
+        }
+
+        // Check if already initialized (skip if accordion exists and is in the DOM)
+        var existingToggle = document.querySelector('.bw-order-summary-toggle');
+        var existingPanel = document.querySelector('#bw-order-summary-panel');
+
+        if (existingToggle && existingPanel && document.body.contains(existingToggle)) {
+            BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Mobile accordion already exists in DOM, skipping');
+            return;
+        }
+
+        // Clean up orphaned elements if they exist but not in DOM
+        if (existingToggle && !document.body.contains(existingToggle)) {
+            existingToggle.remove();
+        }
+        if (existingPanel && !document.body.contains(existingPanel)) {
+            existingPanel.remove();
+        }
+
+        // Create toggle bar
+        var toggleBar = document.createElement('button');
+        toggleBar.type = 'button';
+        toggleBar.className = 'bw-order-summary-toggle';
+        toggleBar.setAttribute('aria-expanded', 'false');
+        toggleBar.setAttribute('aria-controls', 'bw-order-summary-panel');
+
+        var toggleLabel = document.createElement('span');
+        toggleLabel.className = 'bw-order-summary-label';
+        toggleLabel.innerHTML = '<span class="bw-order-summary-text">Order summary</span><svg class="bw-order-summary-icon" width="12" height="8" viewBox="0 0 12 8" fill="none"><path d="M1 1.5L6 6.5L11 1.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+        var toggleTotal = document.createElement('span');
+        toggleTotal.className = 'bw-order-summary-total';
+        toggleTotal.textContent = '...';
+
+        toggleBar.appendChild(toggleLabel);
+        toggleBar.appendChild(toggleTotal);
+
+        // Create panel with CLONED right column
+        var panel = document.createElement('div');
+        panel.id = 'bw-order-summary-panel';
+        panel.className = 'bw-order-summary-panel';
+        panel.setAttribute('aria-hidden', 'true');
+
+        // Find the form element
+        var form = document.querySelector('form.checkout');
+        if (!form) {
+            BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Checkout form not found');
+            return;
+        }
+
+        BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Form found');
+
+        // Insert toggle bar BEFORE the form (as sibling, not child)
+        form.parentNode.insertBefore(toggleBar, form);
+        BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Toggle bar inserted before form');
+
+        // Insert panel after toggle bar (still before form)
+        form.parentNode.insertBefore(panel, form);
+        BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Panel inserted before form');
+
+        // CLONE only the order summary content (not the entire right column)
+        // This ensures we get the actual review order content without wrapper styling issues
+        var orderSummary = rightColumn.querySelector('.bw-order-summary');
+
+        if (!orderSummary) {
+            BW_CHECKOUT_DEBUG && console.error('[BW Checkout] Order summary not found in right column, cannot create mobile accordion');
+            return;
+        }
+
+        // Clone the order summary with deep copy to include all child elements
+        var orderSummaryClone = orderSummary.cloneNode(true);
+
+        // Remove any blockUI overlays immediately from clone
+        var blockUIs = orderSummaryClone.querySelectorAll('.blockUI');
+        blockUIs.forEach(function (el) { el.remove(); });
+
+        // Force display styles on cloned content to ensure visibility
+        orderSummaryClone.style.display = 'block';
+        orderSummaryClone.style.visibility = 'visible';
+        orderSummaryClone.style.opacity = '1';
+
+        // Also force visibility on review table
+        var reviewTable = orderSummaryClone.querySelector('.woocommerce-checkout-review-order-table');
+        if (reviewTable) {
+            reviewTable.style.display = 'table';
+            reviewTable.style.visibility = 'visible';
+            reviewTable.style.opacity = '1';
+        }
+
+        // Create a wrapper div with cart UI base class for shared styling
+        var wrapper = document.createElement('div');
+        wrapper.className = 'bw-order-summary-panel__wrapper bw-cart-ui';
+        // HTML padding removed - handled by CSS
+        wrapper.style.background = 'transparent';
+
+        // Append cloned order summary to wrapper
+        wrapper.appendChild(orderSummaryClone);
+
+        // Append wrapper to panel
+        panel.appendChild(wrapper);
+
+        BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Order summary CLONED into panel with:', orderSummaryClone.childNodes.length, 'child nodes');
+        BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Clone innerHTML length:', orderSummaryClone.innerHTML.length);
+        BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Review table found:', !!reviewTable);
+        if (reviewTable) {
+            BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Review table has', reviewTable.querySelectorAll('tbody tr').length, 'cart items');
+        }
+        BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Original right column will be hidden via CSS on mobile');
+
+        // Initialize panel style for jQuery slideToggle
+        // PERSISTENCE CHECK: Use sessionStorage to survive page reloads (e.g. coupon removal URL)
+        var storedState = false;
+        try {
+            storedState = sessionStorage.getItem('bw_mobile_toggle_open') === 'true';
+        } catch (e) { BW_CHECKOUT_DEBUG && console.log('SessionStorage error', e); }
+
+        if (storedState) {
+            panel.style.display = 'block';
+            panel.setAttribute('aria-hidden', 'false');
+            toggleBar.setAttribute('aria-expanded', 'true');
+            panel.style.overflow = 'visible';
+        } else {
+            panel.style.display = 'none';
+            panel.setAttribute('aria-hidden', 'true');
+            toggleBar.setAttribute('aria-expanded', 'false');
+        }
+
+        // Add toggle functionality
+        toggleBar.addEventListener('click', function (e) {
+            e.preventDefault();
+            var isExpanded = toggleBar.getAttribute('aria-expanded') === 'true';
+
+            // Toggle attributes
+            toggleBar.setAttribute('aria-expanded', !isExpanded);
+            panel.setAttribute('aria-hidden', isExpanded);
+
+            // Update Storage
+            try {
+                sessionStorage.setItem('bw_mobile_toggle_open', (!isExpanded).toString());
+            } catch (e) { }
+
+            // Smooth Slide Animation
+            if (window.jQuery) {
+                window.jQuery(panel).stop().slideToggle(400, function () {
+                    if (!isExpanded) {
+                        panel.style.overflow = 'visible';
+                    } else {
+                        panel.style.overflow = 'hidden';
+                    }
+                });
+            } else {
+                panel.style.display = isExpanded ? 'none' : 'block';
+            }
+        });
+
+        // Keyboard support
+        toggleBar.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                toggleBar.click();
+            }
+        });
+
+        // Add mutation observer to detect if toggle gets removed from DOM
+        var observer = new MutationObserver(function (mutations) {
+            mutations.forEach(function (mutation) {
+                mutation.removedNodes.forEach(function (node) {
+                    if (node === toggleBar || node === panel) {
+                        BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Toggle/panel removed from DOM, reinserting');
+                        if (!document.body.contains(toggleBar)) {
+                            form.parentNode.insertBefore(toggleBar, form);
+                        }
+                        if (!document.body.contains(panel)) {
+                            form.parentNode.insertBefore(panel, form);
+                        }
+                    }
+                });
+            });
+        });
+
+        // Observe the form's parent for removed children
+        observer.observe(form.parentNode, { childList: true });
+
+        BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Mobile order summary accordion initialized with mutation observer');
+
+        // Unique ID for mobile elements to prevent conflicts
+        var mobileInput = panel.querySelector('#coupon_code');
+        var mobileLabel = panel.querySelector('label[for="coupon_code"]');
+
+        if (mobileInput) {
+            mobileInput.id = 'coupon_code_mobile';
+            mobileInput.name = 'coupon_code_mobile'; // Optional: keep name for submit, but ID crucial
+            // IMPORTANT: Remove any potential previous value to reset state if needed, or keep it.
+            // But stripping the initialized attribute is key (handled by initFloatingLabel force)
+        }
+        if (mobileLabel) {
+            mobileLabel.setAttribute('for', 'coupon_code_mobile');
+        }
+
+        // RE-INIT Logic for cloned elements
+        BW_CHECKOUT_DEBUG && console.log('[BW Checkout] triggering initFloatingLabel for mobile panel');
+        // Run immediately, no timeout needed as element is already appended
+        initFloatingLabel(panel, true);
+    }
+
+    /**
+     * Add mobile total row before Place Order button.
+     * ONLY runs on mobile/tablet (≤900px).
+     */
+    function addMobileTotalRow() {
+        BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Adding mobile total row');
+
+        // Only run on mobile/tablet screens (≤900px)
+        if (window.innerWidth > 900) {
+            BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Desktop view detected, skipping mobile total row');
+            return;
+        }
+
+        // Remove existing mobile total row before recreating
+        var existingTotalRow = document.querySelector('.bw-mobile-total-row');
+        if (existingTotalRow) {
+            existingTotalRow.remove();
+        }
+
+        var placeOrderButton = document.querySelector('#place_order');
+        if (!placeOrderButton) {
+            BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Place order button not found');
+            return;
+        }
+
+        // Create mobile total row
+        var totalRow = document.createElement('div');
+        totalRow.className = 'bw-mobile-total-row';
+
+        var totalLabel = document.createElement('span');
+        totalLabel.className = 'bw-mobile-total-label';
+        totalLabel.textContent = 'Total';
+
+        var totalAmount = document.createElement('span');
+        totalAmount.className = 'bw-mobile-total-amount';
+        totalAmount.textContent = '...';
+
+        totalRow.appendChild(totalLabel);
+        totalRow.appendChild(totalAmount);
+
+        // Insert before place order button
+        placeOrderButton.parentElement.insertBefore(totalRow, placeOrderButton);
+
+        BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Mobile total row added');
+    }
+
+    /**
+     * Update total amounts in toggle bar and mobile total row.
+     * Also refreshes the cloned right column content.
+     */
+    function updateMobileTotals() {
+        // Only update if mobile accordion exists
+        var panel = document.getElementById('bw-order-summary-panel');
+        if (!panel) {
+            return;
+        }
+
+        // Find total amount from original right column in grid
+        var rightColumn = document.querySelector('.bw-checkout-grid .bw-checkout-right');
+        if (!rightColumn) {
+            return;
+        }
+
+        var totalElement = rightColumn.querySelector('.order-total .woocommerce-Price-amount, .order-total .amount');
+        if (!totalElement) {
+            BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Total element not found');
+            return;
+        }
+
+        var totalText = totalElement.textContent.trim();
+        BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Updating mobile totals to:', totalText);
+
+        // Update toggle bar total
+        var toggleTotal = document.querySelector('.bw-order-summary-total');
+        if (toggleTotal) {
+            toggleTotal.textContent = totalText;
+        }
+
+        // Update mobile total row
+        var mobileTotalAmount = document.querySelector('.bw-mobile-total-amount');
+        if (mobileTotalAmount) {
+            mobileTotalAmount.textContent = totalText;
+        }
+
+        // Update cloned order summary in panel with fresh content
+        var wrapper = panel.querySelector('.bw-order-summary-panel__wrapper');
+        if (wrapper && rightColumn) {
+            // Find the order summary in the original right column
+            var orderSummary = rightColumn.querySelector('.bw-order-summary');
+
+            if (orderSummary) {
+                // Clone the fresh order summary
+                var newClone = orderSummary.cloneNode(true);
+
+                // Force display styles
+                newClone.style.display = 'block';
+                newClone.style.visibility = 'visible';
+                newClone.style.opacity = '1';
+
+                var reviewTable = newClone.querySelector('.woocommerce-checkout-review-order-table');
+                if (reviewTable) {
+                    reviewTable.style.display = 'table';
+                    reviewTable.style.visibility = 'visible';
+                    reviewTable.style.opacity = '1';
+                }
+
+                // Unique ID for mobile elements to prevent conflicts
+                var mobileInput = newClone.querySelector('#coupon_code');
+                var mobileLabel = newClone.querySelector('label[for="coupon_code"]');
+
+                if (mobileInput) {
+                    mobileInput.id = 'coupon_code_mobile';
+                    // Clear initialization flag to allow re-binding
+                    delete mobileInput.dataset.bwFloatingLabelInitialized;
+                    // mobileInput.name = 'coupon_code_mobile'; 
+                }
+                if (mobileLabel) {
+                    mobileLabel.setAttribute('for', 'coupon_code_mobile');
+                }
+
+                // Replace the old clone with the new one
+                var oldClone = wrapper.querySelector('.bw-order-summary');
+                if (oldClone) {
+                    wrapper.replaceChild(newClone, oldClone);
+                    BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Refreshed cloned order summary in panel');
+                    // Re-init floating labels on the new clone
+                    initFloatingLabel(wrapper, true);
+                }
+            }
+        }
+    }
+
+    BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Script reached end, about to initialize. DOM readyState:', document.readyState);
+
+    // Initialize all functions when DOM is ready
+    if (document.readyState === 'loading') {
+        BW_CHECKOUT_DEBUG && console.log('[BW Checkout] DOM still loading, waiting for DOMContentLoaded');
+        document.addEventListener('DOMContentLoaded', function () {
+            BW_CHECKOUT_DEBUG && console.log('[BW Checkout] DOMContentLoaded fired, initializing now');
+            initCustomSticky();
+            observeStripeErrors();
+            initEntityDecoder(); // Initialize error decoder
+
+            // Force global init for floating labels (Desktop + any existing)
+            initFloatingLabel(document);
+
+            initCheckoutFloatingLabels();
+            initGooglePlacesAutocomplete();
+            moveDeliveryHeading();
+            initBillingAddressAccordion();
+            detectFreeOrder();
+            hideSectionHeadings();
+            initMobileOrderSummary();
+            addMobileTotalRow();
+            updateMobileTotals();
+            initShippingToggleFix();
+            initPolicyPopups();
+
+            // Handle resize to initialize mobile accordion when switching views
+            window.addEventListener('resize', function () {
+                if (window.innerWidth <= 900) {
+                    initMobileOrderSummary();
+                    addMobileTotalRow();
+                    updateMobileTotals();
+                }
+            });
+        });
+    } else {
+        BW_CHECKOUT_DEBUG && console.log('[BW Checkout] DOM already loaded, initializing immediately');
+        initCustomSticky();
+        observeStripeErrors();
+
+        // Force global init for floating labels (Desktop + any existing)
+        initFloatingLabel(document);
+
+        initCheckoutFloatingLabels();
+        initGooglePlacesAutocomplete();
+        moveDeliveryHeading();
+        initBillingAddressAccordion();
+        detectFreeOrder();
+        hideSectionHeadings();
+        initMobileOrderSummary();
+        addMobileTotalRow();
+        addMobileTotalRow();
+        updateMobileTotals();
+        initShippingToggleFix();
+        initPolicyPopups();
+        styleCheckoutCoupons();
+    }
+
+    /**
+     * Fix for "Ship to a different address" checkbox scrolling to top.
+     * THE TITANIUM EDITION: Blocks every possible scroll trigger.
+     */
+    function initShippingToggleFix() {
+        if (!window.jQuery) return;
+        var $ = window.jQuery;
+
+        // 1. SAVE original scroll functions and override them
+        if (!window.bw_original_scrollTo) {
+            window.bw_original_scrollTo = window.scrollTo;
+            window.bw_original_scroll = window.scroll;
+
+            window.scrollTo = function (x, y) {
+                if (window.bw_is_toggling_shipping && !window.bw_allow_shipping_scroll) {
+                    // console.log('[BW Checkout] TITANIUM: Blocked direct window.scrollTo(', x, y, ')');
+                    return;
+                }
+                return window.bw_original_scrollTo.apply(this, arguments);
+            };
+
+            window.scroll = function (x, y) {
+                if (window.bw_is_toggling_shipping && !window.bw_allow_shipping_scroll) {
+                    // console.log('[BW Checkout] TITANIUM: Blocked direct window.scroll(', x, y, ')');
+                    return;
+                }
+                return window.bw_original_scroll.apply(this, arguments);
+            };
+        }
+
+        // 2. OVERRIDE jQuery animate
+        if (!$.fn.bw_original_animate) {
+            $.fn.bw_original_animate = $.fn.animate;
+        }
+
+        $.fn.animate = function (props, speed, easing, callback) {
+            if (window.bw_is_toggling_shipping && props && props.scrollTop !== undefined) {
+                if (!window.bw_allow_shipping_scroll) {
+                    // console.log('[BW Checkout] TITANIUM: Blocked jQuery.animate scroll');
+                    return this;
+                }
+            }
+            return $.fn.bw_original_animate.apply(this, arguments);
+        };
+
+        // 3. LISTEN for clicks and LOCK scroll
+        $(document.body).off('click.bwTitaniumScroll').on('click.bwTitaniumScroll', '#ship-to-different-address-checkbox', function (e) {
+            var checkbox = $(this);
+            var isChecked = checkbox.is(':checked');
+            var shippingForm = $('.shipping_address');
+
+            // SAVE current position
+            var savedScrollTop = $(window).scrollTop();
+
+            // ACTIVATE generic scroll blocker
+            window.bw_is_toggling_shipping = true;
+            window.bw_allow_shipping_scroll = false;
+
+            // MANUALLY handle visibility immediately
+            if (isChecked) { shippingForm.show(); } else { shippingForm.hide(); }
+
+            // BRUTE FORCE scroll reset on any scroll attempt for next 300ms
+            var scrollResetter = function () {
+                if (!window.bw_allow_shipping_scroll) {
+                    window.bw_original_scrollTo(0, savedScrollTop);
+                }
+            };
+            window.addEventListener('scroll', scrollResetter, { passive: false });
+
+            // After a short delay, we trigger OUR specific scroll
+            setTimeout(function () {
+                // Remove the brute force resetter
+                window.removeEventListener('scroll', scrollResetter);
+
+                if (isChecked && shippingForm.length && shippingForm.is(':visible')) {
+                    window.bw_allow_shipping_scroll = true;
+
+                    $('html, body').stop().bw_original_animate({
+                        scrollTop: shippingForm.offset().top - 140
+                    }, 800, function () {
+                        window.bw_allow_shipping_scroll = false;
+                        window.bw_is_toggling_shipping = false;
+                    });
+                } else {
+                    // Just stay put
+                    setTimeout(function () {
+                        window.bw_is_toggling_shipping = false;
+                    }, 500);
+                }
+            }, 300); // 300ms of hard locking
+        });
+    }
+
+    /**
+     * Initialize policy popups for the checkout footer.
+     */
+    function initPolicyPopups() {
+        if (!window.jQuery) return;
+        var $ = window.jQuery;
+
+        // Use global document delegation - much more robust for AJAX/Fragments
+        $(document).off('click.bwPolicy').on('click.bwPolicy', '.bw-policy-link', function (e) {
+            e.preventDefault();
+
+            var link = $(this);
+            var modal = $('#bw-policy-modal');
+
+            if (modal.length === 0) {
+                BW_CHECKOUT_DEBUG && console.warn('[BW Checkout] Policy modal not found in DOM');
+                return;
+            }
+
+            var policyKey = link.attr('data-policy');
+            var policyMap = (window.bwPolicyContent && typeof window.bwPolicyContent === 'object')
+                ? window.bwPolicyContent
+                : {};
+            var mapped = (policyKey && policyMap[policyKey]) ? policyMap[policyKey] : null;
+
+            var data = {
+                title: mapped && mapped.title ? mapped.title : (link.attr('data-title') || ''),
+                subtitle: mapped && mapped.subtitle ? mapped.subtitle : (link.attr('data-subtitle') || ''),
+                content: mapped && mapped.content ? mapped.content : (link.attr('data-content') || '')
+            };
+
+            if (data.title || data.subtitle || data.content) {
+                modal.find('.bw-policy-modal__title').text(data.title || '');
+                modal.find('.bw-policy-modal__subtitle').text(data.subtitle || '');
+                // content is sanitized server-side with wp_kses_post() — HTML is intentional
+                modal.find('.bw-policy-modal__body').html(data.content || '');
+
+                // Show container and trigger transition
+                modal.css('display', 'flex');
+
+                // Tiny delay to ensure browser registers display:flex before adding active class
+                setTimeout(function () {
+                    modal.addClass('is-active');
+                    $('body').addClass('bw-modal-open');
+                }, 10);
+            }
+        });
+
+        // Close events - also delegated for robustness
+        $(document).off('click.bwModalClose').on('click.bwModalClose', '#bw-policy-modal .bw-policy-modal__close, #bw-policy-modal .bw-policy-modal__overlay', function (e) {
+            if (e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+
+            var modal = $('#bw-policy-modal');
+            modal.removeClass('is-active');
+
+            setTimeout(function () {
+                modal.css('display', 'none');
+                $('body').removeClass('bw-modal-open');
+            }, 400); // Wait for transition to finish
+        });
+
+        $(document).off('keydown.bwModalEscape').on('keydown.bwModalEscape', function (e) {
+            var modal = $('#bw-policy-modal');
+            if (e.key === 'Escape' && modal.is(':visible')) {
+                modal.removeClass('is-active');
+
+                setTimeout(function () {
+                    modal.css('display', 'none');
+                    $('body').removeClass('bw-modal-open');
+                }, 400);
+            }
+        });
+    }
+
+    // Re-initialize floating labels and detect free order after WooCommerce AJAX update
+    if (window.jQuery) {
+        jQuery(document.body).on('updated_checkout', function () {
+            BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Checkout updated, refreshing components');
+
+            // Detect free order immediately without delay
+            detectFreeOrder();
+
+            // Re-initialize mobile accordion if it was removed (only creates if missing)
+            initMobileOrderSummary();
+
+            // Re-add mobile total row (gets removed by WooCommerce form update)
+            addMobileTotalRow();
+
+            // Update mobile totals and refresh cloned content immediately
+            updateMobileTotals();
+
+            // Re-bind shipping toggle fix
+            initShippingToggleFix();
+
+            // Also re-run after a small delay for elements that render slower
+            setTimeout(function () {
+                // FORCE GLOBAL RE-INIT of floating labels to catch refreshed desktop and mobile inputs
+                initFloatingLabel(document);
+
+                initCheckoutFloatingLabels();
+                initGooglePlacesAutocomplete();
+                moveDeliveryHeading();
+                initBillingAddressAccordion();
+                detectFreeOrder();
+                hideSectionHeadings();
+                updateMobileTotals();
+                styleCheckoutCoupons();
+                initPolicyPopups();
+            }, 50);
+        });
+    }
+
+    /**
+     * Style checkout coupons as black pills (matching Cart Popup)
+     */
+    function styleCheckoutCoupons() {
+        // Target standard Woo checkout/cart rows
+        var couponRows = document.querySelectorAll('tr.cart-discount th, tr.cart-discount .woocommerce-table__product-name');
+
+        couponRows.forEach(function (th) {
+            // Avoid double styling
+            if (th.querySelector('.bw-cart-coupon-label')) return;
+
+            // Text is typically "Coupon: code"
+            var text = th.textContent.trim();
+            // Remove common prefixes
+            var code = text.replace(/^(Coupon:|Coupon|Codice promozionale:|Codice:|Codice)\b\s*:?/i, '').trim();
+
+            // Fallback for messy text
+            if (!code && text.includes(':')) {
+                code = text.split(':').pop().trim();
+            }
+            if (!code) code = text; // Just use all text if we can't parse
+
+            if (code) {
+                var couponLabel = document.createElement('span');
+                couponLabel.className = 'bw-cart-coupon-label';
+                var couponIcon = document.createElement('span');
+                couponIcon.className = 'bw-cart-coupon-icon';
+                couponLabel.appendChild(couponIcon);
+                couponLabel.appendChild(document.createTextNode(' ' + code));
+                th.textContent = '';
+                th.appendChild(couponLabel);
+            }
+        });
+    }
+
+    /**
+     * Aggressive Watcher for Mobile Coupon Field
+     * Solves issues where events might be lost or value sync fails on clones.
+     */
+    setInterval(function () {
+        // Find input inside the panel specifically to ensure we target the visible mobile one
+        var panel = document.getElementById('bw-order-summary-panel');
+        if (!panel) return;
+
+        var mobileInput = panel.querySelector('input[name="coupon_code"]');
+        if (!mobileInput) return;
+
+        var wrapper = mobileInput.closest('.bw-coupon-input-wrapper');
+        if (!wrapper) return;
+
+        var val = mobileInput.value.trim();
+        var hasValue = val.length > 0;
+
+        // Force class sync - SIMPLE AND DIRECT
+        if (hasValue) {
+            if (!wrapper.classList.contains('has-value')) {
+                wrapper.classList.add('has-value');
+            }
+        } else {
+            // If empty, remove class (regardless of focus, to ensure clean state if user cleared it)
+            if (wrapper.classList.contains('has-value')) {
+                wrapper.classList.remove('has-value');
+            }
+        }
+
+        // Force floating label text update if needed
+        var label = wrapper.querySelector('.bw-floating-label');
+        if (label) {
+            if (hasValue && label.getAttribute('data-short')) {
+                if (label.textContent !== label.getAttribute('data-short')) {
+                    label.textContent = label.getAttribute('data-short');
+                }
+            } else if (!hasValue && label.getAttribute('data-full')) {
+                if (label.textContent !== label.getAttribute('data-full')) {
+                    label.textContent = label.getAttribute('data-full');
+                }
+            }
+        }
+
+    }, 250); // Check every 250ms
+
+    /**
+     * Fix Stripe Element styling that might be missed by PHP/CSS
+     * Force 8px border radius on card elements (NOT Express Checkout buttons)
+     */
+    function fixStripeAppearance() {
+        // Only target card/payment elements, NOT Express Checkout buttons
+        var selectors = [
+            '#wc-stripe-payment-element',
+            '#wc-stripe-card-element',
+            '.wc-stripe-elements-field',
+            '.wc-stripe-upe-element',
+            '#stripe-card-element',
+            '#stripe-exp-element',
+            '#stripe-cvc-element',
+            '.stripe-elements-container'
+        ];
+
+        selectors.forEach(function (selector) {
+            var elements = document.querySelectorAll(selector);
+            elements.forEach(function (el) {
+                // Skip if inside Express Checkout element
+                if (el.closest('#wc-stripe-express-checkout-element')) {
+                    return;
+                }
+                el.style.setProperty('border-radius', '8px', 'important');
+                el.style.setProperty('overflow', 'hidden', 'important');
+            });
+        });
+    }
+
+    // Run fixStripeAppearance on load and on checkout updates (once, not repeatedly)
+    setTimeout(fixStripeAppearance, 500);
+    setTimeout(fixStripeAppearance, 2000); // Check again after Stripe likely loaded
+
+    if (window.jQuery) {
+        window.jQuery(document.body).on('updated_checkout updated_shipping_method', function () {
+            setTimeout(fixStripeAppearance, 500);
+        });
+    }
+
+    /**
+     * Fix Express Checkout spacing - Remove inline styles set by Stripe
+     * Stripe sets margin-top on the Express Checkout element and separator via JavaScript
+     * We completely replace the style attribute to override Stripe's !important
+     */
+    function fixExpressCheckoutSpacing() {
+        var isFreeOrder = document.body && document.body.classList.contains('bw-free-order');
+        var expressWrappers = document.querySelectorAll('#wcpay-express-checkout-element, #wc-stripe-express-checkout-element-wrapper, .wcpay-express-checkout-wrapper');
+
+        // Completely override Express Checkout element styles
+        var expressCheckout = document.getElementById('wc-stripe-express-checkout-element');
+        if (expressCheckout) {
+            if (isFreeOrder) {
+                expressCheckout.style.cssText = 'display: none !important; margin: 0 !important; padding: 0 !important; min-height: 0 !important; height: 0 !important; overflow: hidden !important;';
+            } else {
+                // Remove ALL inline styles and set only what we need
+                expressCheckout.style.cssText = 'margin: 0 !important; padding: 0 !important; min-height: 0 !important; display: flex !important; flex-wrap: wrap !important; gap: 12px !important; width: 100% !important; overflow: visible !important;';
+            }
+        }
+
+        // PHYSICALLY REMOVE the native Stripe separator from DOM
+        var separator = document.getElementById('wc-stripe-express-checkout-button-separator');
+        if (separator && separator.parentNode) {
+            separator.parentNode.removeChild(separator);
+        }
+
+        // Also hide Stripe internal separator (p- prefix classes)
+        if (expressCheckout) {
+            // Find elements that look like separators (not buttons/containers)
+            var allChildren = expressCheckout.querySelectorAll('*');
+            allChildren.forEach(function(el) {
+                if (!el.className || typeof el.className !== 'string') return;
+
+                // Check if it's a separator class (contains Separator or Divider)
+                var isSeparator = /p-.*(?:Separator|Divider)/i.test(el.className);
+
+                // Check if element contains only "OR" text
+                var isOrText = el.childNodes.length === 1 &&
+                               el.firstChild &&
+                               el.firstChild.nodeType === 3 &&
+                               el.textContent.trim().toLowerCase() === 'or';
+
+                // Don't hide button-related elements
+                var isButtonRelated = /(?:Button|Container|Frame|Pay)/i.test(el.className);
+
+                if ((isSeparator || isOrText) && !isButtonRelated) {
+                    el.style.cssText = 'display: none !important; height: 0 !important; visibility: hidden !important;';
+                }
+            });
+        }
+
+        // Also handle payment request wrapper
+        var paymentRequest = document.getElementById('wc-stripe-payment-request-wrapper');
+        if (paymentRequest) {
+            if (isFreeOrder) {
+                paymentRequest.style.cssText = 'display: none !important; margin: 0 !important; padding: 0 !important; min-height: 0 !important; height: 0 !important; overflow: hidden !important;';
+            } else {
+                paymentRequest.style.cssText = 'margin: 0 !important; padding: 0 !important; min-height: 0 !important; display: flex !important; flex-wrap: wrap !important; gap: 12px !important; width: 100% !important; overflow: visible !important;';
+            }
+        }
+
+        // Keep wrapper containers in sync with free-order state.
+        expressWrappers.forEach(function (wrapper) {
+            if (isFreeOrder) {
+                wrapper.style.cssText = 'display: none !important; margin: 0 !important; padding: 0 !important; min-height: 0 !important; height: 0 !important; overflow: hidden !important;';
+            } else {
+                wrapper.style.removeProperty('display');
+                wrapper.style.removeProperty('height');
+                wrapper.style.removeProperty('overflow');
+                wrapper.style.removeProperty('margin');
+                wrapper.style.removeProperty('padding');
+                wrapper.style.removeProperty('min-height');
+            }
+        });
+
+        // PHYSICALLY REMOVE wc-order-attribution-inputs from DOM
+        var attribution = document.querySelector('wc-order-attribution-inputs');
+        if (attribution && attribution.parentNode) {
+            attribution.parentNode.removeChild(attribution);
+        }
+    }
+
+    // Run immediately
+    fixExpressCheckoutSpacing();
+
+    // Run continuously every 200ms for the first 10 seconds
+    var fixCount = 0;
+    var maxFixes = 50; // 50 * 200ms = 10 seconds
+    var fixInterval = setInterval(function() {
+        fixExpressCheckoutSpacing();
+        fixCount++;
+        if (fixCount >= maxFixes) {
+            clearInterval(fixInterval);
+        }
+    }, 200);
+
+    // Also run on window resize (this is what happens when DevTools opens)
+    window.addEventListener('resize', function() {
+        fixExpressCheckoutSpacing();
+    });
+
+    // Also run on checkout updates
+    if (window.jQuery) {
+        window.jQuery(document.body).on('updated_checkout updated_shipping_method', function () {
+            fixExpressCheckoutSpacing();
+            // Reset the interval counter to keep fixing for another 10 seconds
+            fixCount = 0;
+        });
+    }
+
+    BW_CHECKOUT_DEBUG && console.log('[BW Checkout] Script execution completed');
+})();

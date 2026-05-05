@@ -1,0 +1,479 @@
+.bw-wallpost {
+  position: relative;
+  width: 100%;
+  --bw-wallpost-columns: 4;
+  --bw-wallpost-gap: 10px;
+  --bw-wallpost-image-height: 625px;
+  --bw-wallpost-hover-opacity: 0.7;
+  --bw-wallpost-overlay-buttons-background: #ffffff;
+  --bw-wallpost-overlay-buttons-background-hover: #80FD03;
+  --bw-wallpost-overlay-buttons-color: #000000;
+  --bw-wallpost-overlay-buttons-color-hover: #000000;
+  --bw-wallpost-overlay-buttons-radius: 8px;
+  --bw-wallpost-overlay-buttons-padding-top: 13px;
+  --bw-wallpost-overlay-buttons-padding-right: 10px;
+  --bw-wallpost-overlay-buttons-padding-bottom: 13px;
+  --bw-wallpost-overlay-buttons-padding-left: 10px;
+  box-sizing: border-box;
+}
+
+.bw-wallpost-grid {
+  margin: 0 calc(var(--bw-wallpost-gap) / -2);
+  overflow: visible;
+}
+
+.bw-wallpost-item {
+  /* Width is set dynamically by JavaScript based on columns */
+  /* This ensures Masonry calculates layout correctly for all devices */
+  padding: calc(var(--bw-wallpost-gap) / 2);
+  box-sizing: border-box;
+}
+
+.bw-wallpost-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: transparent;
+}
+
+.bw-wallpost-media-wrapper {
+  position: relative;
+}
+
+.bw-wallpost-media,
+.bw-wallpost .bw-ss__media {
+  position: relative;
+  overflow: hidden;
+  border-radius: inherit;
+}
+
+.bw-wallpost-image,
+.bw-wallpost .bw-slick-slider-image {
+  position: relative;
+  overflow: hidden;
+  z-index: 0;
+}
+
+/* Link invisibile che copre l'intera area dell'immagine */
+/* Z-index aumentato per essere sopra entrambe le immagini (main e hover) */
+.bw-wallpost-image-link-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: block;
+  cursor: pointer;
+}
+
+/* Stili immagine identici a BW Slick Slider */
+.bw-wallpost .bw-slick-slider-image--has-hover .bw-slider-main,
+.bw-wallpost .bw-slick-slider-image--has-hover .bw-slider-hover {
+  display: block;
+  width: 100%;
+  transition: opacity 0.35s ease;
+}
+
+.bw-wallpost .bw-slick-slider-image--has-hover .bw-slider-hover {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.bw-wallpost .bw-slick-slider-image--has-hover .bw-slider-main {
+  position: relative;
+  z-index: 0;
+}
+
+.bw-wallpost .bw-ss__media:hover .bw-slick-slider-image--has-hover .bw-slider-hover,
+.bw-wallpost .bw-ss__media:focus-within .bw-slick-slider-image--has-hover .bw-slider-hover {
+  opacity: 1;
+}
+
+.bw-wallpost .bw-ss__media:hover .bw-slick-slider-image--has-hover .bw-slider-main,
+.bw-wallpost .bw-ss__media:focus-within .bw-slick-slider-image--has-hover .bw-slider-main {
+  opacity: 0;
+}
+
+.bw-wallpost-media--placeholder,
+.bw-wallpost .bw-slick-item__image--placeholder {
+  background: #f4f4f4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bw-wallpost-media img,
+.bw-wallpost .bw-ss__media img,
+.bw-wallpost .bw-slick-item__image img {
+  display: block;
+  width: 100%;
+  height: var(--bw-wallpost-image-height);
+  object-fit: cover;
+  transition: none;
+  transform: none;
+  border-radius: inherit;
+}
+
+.bw-wallpost-image-placeholder {
+  display: block;
+  width: 100%;
+  padding-bottom: 65%;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(0, 0, 0, 0.04),
+    rgba(0, 0, 0, 0.04) 10px,
+    rgba(0, 0, 0, 0.08) 10px,
+    rgba(0, 0, 0, 0.08) 20px
+  );
+}
+
+/* Overlay identico a BW Slick Slider */
+/* Z-index aumentato per essere sopra il link overlay dell'immagine */
+.bw-wallpost-overlay,
+.bw-wallpost .overlay-buttons,
+.bw-wallpost .bw-ss__overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  z-index: 15;
+  pointer-events: none;
+  box-sizing: border-box;
+  padding: 16px;
+  border-radius: inherit;
+}
+
+.bw-wallpost .bw-ss__media:hover .bw-ss__overlay,
+.bw-wallpost .bw-ss__media:focus-within .bw-ss__overlay,
+.bw-wallpost .bw-ss__overlay:hover,
+.bw-wallpost .bw-ss__overlay:focus-within {
+  opacity: 1;
+  transform: translateY(0);
+  /* pointer-events: auto; - Rimosso per permettere il click sull'immagine sottostante */
+}
+
+.bw-wallpost-overlay-buttons,
+.bw-wallpost .bw-ss__buttons {
+  display: flex;
+  width: 100%;
+  gap: 0;
+  pointer-events: auto;
+  position: relative;
+  z-index: 20;
+}
+
+.bw-wallpost-overlay-buttons--double .bw-wallpost-overlay-button,
+.bw-wallpost .bw-ss__buttons--double .overlay-button {
+  flex: 1 1 50%;
+  width: 50%;
+}
+
+/* Bottoni identici a BW Slick Slider */
+.bw-wallpost-overlay-button,
+.bw-wallpost .overlay-button,
+.bw-wallpost .bw-slide-button {
+  position: relative;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  flex: 1 1 100%;
+  padding: var(--bw-wallpost-overlay-buttons-padding-top) var(--bw-wallpost-overlay-buttons-padding-right)
+    var(--bw-wallpost-overlay-buttons-padding-bottom) var(--bw-wallpost-overlay-buttons-padding-left);
+  background: var(--bw-wallpost-overlay-buttons-background);
+  color: var(--bw-wallpost-overlay-buttons-color);
+  border: 1px solid #080808;
+  border-radius: 0;
+  font-weight: 500;
+  text-decoration: none;
+  overflow: visible;
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+.bw-wallpost .bw-btn-addtocart {
+  text-decoration: none;
+}
+
+.bw-wallpost-overlay-button:first-child,
+.bw-wallpost .overlay-button:first-child,
+.bw-wallpost .bw-slide-button:first-child {
+  border-top-left-radius: var(--bw-wallpost-overlay-buttons-radius);
+  border-bottom-left-radius: var(--bw-wallpost-overlay-buttons-radius);
+}
+
+.bw-wallpost-overlay-button:last-child,
+.bw-wallpost .overlay-button:last-child,
+.bw-wallpost .bw-slide-button:last-child {
+  border-top-right-radius: var(--bw-wallpost-overlay-buttons-radius);
+  border-bottom-right-radius: var(--bw-wallpost-overlay-buttons-radius);
+}
+
+.bw-wallpost-overlay-button + .bw-wallpost-overlay-button,
+.bw-wallpost .overlay-button + .overlay-button,
+.bw-wallpost .bw-slide-button + .bw-slide-button {
+  border-left: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* Label con underline effect */
+.bw-wallpost .overlay-button__label {
+  position: relative;
+  display: inline-block;
+  line-height: 1.2;
+}
+
+.bw-wallpost .overlay-button__label::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -0.35em;
+  width: 100%;
+  height: 2px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.3s ease;
+}
+
+.bw-wallpost-overlay-button:hover,
+.bw-wallpost-overlay-button:focus,
+.bw-wallpost .overlay-button:hover,
+.bw-wallpost .overlay-button:focus,
+.bw-wallpost .bw-slide-button:hover,
+.bw-wallpost .bw-slide-button:focus {
+  background: var(--bw-wallpost-overlay-buttons-background-hover);
+  color: var(--bw-wallpost-overlay-buttons-color-hover);
+}
+
+.bw-wallpost .overlay-button:hover .overlay-button__label::after,
+.bw-wallpost .overlay-button:focus .overlay-button__label::after {
+  transform: scaleX(1);
+}
+
+/* Contenitore immagine identico a BW Slick Slider */
+.bw-wallpost .bw-slider-image-container {
+  background: transparent;
+  overflow: hidden;
+}
+
+.bw-wallpost .bw-slick-item__inner,
+.bw-wallpost .bw-ss__card {
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Contenuto testuale identico a BW Slick Slider */
+.bw-wallpost-content,
+.bw-wallpost .bw-slick-item__content {
+  padding: 10px 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.bw-wallpost .bw-slick-slider-text-box {
+  background-color: transparent;
+  padding: 15px;
+  box-sizing: border-box;
+  transition: background-color 0.3s ease;
+}
+
+.bw-wallpost-title,
+.bw-wallpost .bw-slick-item__title,
+.bw-wallpost .bw-slick-title {
+  margin: 0;
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.bw-wallpost-title a,
+.bw-wallpost .bw-slick-item__title a {
+  text-decoration: none;
+  color: inherit;
+}
+
+.bw-wallpost-title a:hover,
+.bw-wallpost-title a:focus,
+.bw-wallpost .bw-slick-item__title a:hover,
+.bw-wallpost .bw-slick-item__title a:focus {
+  text-decoration: underline;
+}
+
+.bw-wallpost-description,
+.bw-wallpost .bw-slick-item__excerpt,
+.bw-wallpost .bw-slick-description {
+  color: #080808;
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.bw-wallpost-description p,
+.bw-wallpost .bw-slick-item__excerpt p,
+.bw-wallpost .bw-slick-description p {
+  margin: 0;
+}
+
+.bw-wallpost-price,
+.bw-wallpost .bw-slick-item__price,
+.bw-wallpost .bw-slick-price {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+  color: #080808;
+}
+
+.bw-wallpost-price .price-original,
+.bw-wallpost .bw-slick-item__price .price-original {
+  color: rgba(17, 17, 17, 0.55);
+  text-decoration: line-through;
+}
+
+.bw-wallpost-price .price-original del,
+.bw-wallpost .bw-slick-item__price .price-original del {
+  text-decoration: inherit;
+}
+
+.bw-wallpost-price .price-sale,
+.bw-wallpost .bw-slick-item__price .price-sale {
+  color: #080808;
+}
+
+.bw-wallpost-price .price-regular,
+.bw-wallpost .bw-slick-item__price .price-regular {
+  color: #080808;
+}
+
+.bw-wallpost-placeholder {
+  text-align: center;
+  padding: 40px 0;
+}
+
+.bw-wallpost-grid:after {
+  content: '';
+  display: block;
+  clear: both;
+}
+
+/* Elementor Editor Specific Styles */
+.elementor-editor-active .bw-wallpost-grid,
+.elementor-edit-mode .bw-wallpost-grid {
+  min-height: 100px;
+}
+
+/* Ensure items don't collapse to full width in editor */
+.elementor-editor-active .bw-wallpost-item,
+.elementor-edit-mode .bw-wallpost-item {
+  float: left;
+}
+
+/* Width is now set dynamically by JavaScript for all contexts */
+/* This ensures consistent behavior between editor and frontend */
+.elementor-editor-active .bw-wallpost-item,
+.elementor-edit-mode .bw-wallpost-item,
+.elementor .bw-wallpost-item,
+body.elementor-editor-active .bw-wallpost-item {
+  /* JavaScript handles width calculation */
+}
+
+/* Ensure grid container maintains proper height */
+.bw-wallpost-grid.bw-wallpost-initialized {
+  position: relative;
+  min-height: 200px;
+  transition: height 0.3s ease;
+}
+
+/* Force proper height calculation in Elementor editor */
+.elementor-editor-active .bw-wallpost-grid.bw-wallpost-initialized,
+.elementor-edit-mode .bw-wallpost-grid.bw-wallpost-initialized {
+  display: block;
+  overflow: visible;
+}
+
+/* Prevent content overlap */
+.bw-wallpost-grid:after {
+  content: '';
+  display: block;
+  clear: both;
+  height: 0;
+  visibility: hidden;
+}
+
+/* Loading overlay for Elementor editor */
+.bw-wallpost--loading {
+  position: relative;
+}
+
+.bw-wallpost--loading::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.8);
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.bw-wallpost--loading::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 40px;
+  height: 40px;
+  margin: -20px 0 0 -20px;
+  border: 3px solid rgba(0, 0, 0, 0.1);
+  border-top-color: rgba(0, 0, 0, 0.6);
+  border-radius: 50%;
+  z-index: 1001;
+  animation: bw-wallpost-spin 0.8s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes bw-wallpost-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Ensure loading overlay is visible in Elementor editor */
+.elementor-editor-active .bw-wallpost--loading::before,
+.elementor-edit-mode .bw-wallpost--loading::before,
+.elementor-editor-active .bw-wallpost--loading::after,
+.elementor-edit-mode .bw-wallpost--loading::after {
+  display: block;
+}
+
+/* ===================================
+   Responsive: tablet & mobile
+   =================================== */
+@media (max-width: 1024px) {
+  .bw-wallpost-overlay-button,
+  .bw-wallpost .overlay-button,
+  .bw-wallpost .bw-slide-button {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 767px) {
+  .bw-wallpost-overlay-button,
+  .bw-wallpost .overlay-button,
+  .bw-wallpost .bw-slide-button {
+    font-size: 12px;
+  }
+}
