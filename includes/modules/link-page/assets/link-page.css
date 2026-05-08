@@ -335,6 +335,31 @@ body {
     transition: transform 0.12s ease, opacity 0.12s ease;
 }
 
+.link-item--email {
+    flex-direction: column;
+    gap: 6px;
+}
+
+.link-item-email-title {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.link-item-email-icon {
+    font-size: 0.95em;
+    line-height: 1;
+}
+
+.link-item-email-address {
+    display: block;
+    font-size: 0.52em;
+    line-height: 1.2;
+    opacity: 0.95;
+    word-break: break-word;
+}
+
 .link-item::after {
     content: none;
 }

@@ -35,8 +35,12 @@
             var row = document.createElement('tr');
             row.innerHTML = '' +
                 '<td style="text-align:center;vertical-align:middle;"><span class="bw-link-page-drag-handle" aria-label="Drag to reorder" title="Drag to reorder" style="cursor:move;display:inline-block;font-size:18px;line-height:1;color:#2271b1;">&#8801;</span></td>' +
+                '<td><label><input type="checkbox" name="' + optionKey + '[links][' + index + '][enabled]" value="1" checked> On</label></td>' +
+                '<td><select name="' + optionKey + '[links][' + index + '][link_type]"><option value="url" selected>URL</option><option value="email">Email contact</option></select></td>' +
                 '<td><input type="text" class="regular-text" name="' + optionKey + '[links][' + index + '][label]" value=""></td>' +
                 '<td><input type="url" class="regular-text" name="' + optionKey + '[links][' + index + '][url]" value=""></td>' +
+                '<td><input type="email" class="regular-text" name="' + optionKey + '[links][' + index + '][email]" value="" placeholder="name@example.com"></td>' +
+                '<td><label><input type="checkbox" name="' + optionKey + '[links][' + index + '][show_mail_icon]" value="1" checked> Show</label></td>' +
                 '<td><input type="text" class="bw-link-page-color-field" name="' + optionKey + '[links][' + index + '][button_color]" value="" placeholder="Default"></td>' +
                 '<td><input type="text" class="bw-link-page-color-field" name="' + optionKey + '[links][' + index + '][border_color]" value="" placeholder="Default"></td>' +
                 '<td><input type="text" class="bw-link-page-color-field" name="' + optionKey + '[links][' + index + '][text_color]" value="" placeholder="Default"></td>' +

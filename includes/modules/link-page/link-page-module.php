@@ -180,18 +180,30 @@ function bw_link_page_sanitize_settings($raw)
 
             $label = isset($link['label']) ? sanitize_text_field($link['label']) : '';
             $url = isset($link['url']) ? esc_url_raw($link['url']) : '';
+            $email = isset($link['email']) ? sanitize_email((string) $link['email']) : '';
+            $link_type = isset($link['link_type']) && 'email' === $link['link_type'] ? 'email' : 'url';
+            $enabled = !isset($link['enabled']) || !empty($link['enabled']) ? 1 : 0;
+            $show_mail_icon = !isset($link['show_mail_icon']) || !empty($link['show_mail_icon']) ? 1 : 0;
             $target = !empty($link['target']) ? 1 : 0;
             $button_color = isset($link['button_color']) ? bw_link_page_sanitize_css_color((string) $link['button_color']) : '';
             $border_color = isset($link['border_color']) ? bw_link_page_sanitize_css_color((string) $link['border_color']) : '';
             $text_color = isset($link['text_color']) ? bw_link_page_sanitize_css_color((string) $link['text_color']) : '';
 
-            if ('' === $label || '' === $url) {
+            if ('email' === $link_type) {
+                if ('' === $label || '' === $email) {
+                    continue;
+                }
+            } elseif ('' === $label || '' === $url) {
                 continue;
             }
 
             $settings['links'][] = [
                 'label' => $label,
                 'url' => $url,
+                'email' => $email,
+                'link_type' => $link_type,
+                'enabled' => $enabled,
+                'show_mail_icon' => $show_mail_icon,
                 'target' => $target,
                 'button_color' => is_string($button_color) ? $button_color : '',
                 'border_color' => is_string($border_color) ? $border_color : '',
@@ -936,8 +948,12 @@ function bw_link_page_render_settings_tab($settings, $pages, $logo_url)
             <thead>
             <tr>
                 <th style="width:44px;"></th>
+                <th><?php esc_html_e('On/Off', 'bw'); ?></th>
+                <th><?php esc_html_e('Type', 'bw'); ?></th>
                 <th><?php esc_html_e('Label', 'bw'); ?></th>
                 <th><?php esc_html_e('URL', 'bw'); ?></th>
+                <th><?php esc_html_e('Email', 'bw'); ?></th>
+                <th><?php esc_html_e('Mail icon', 'bw'); ?></th>
                 <th><?php esc_html_e('Button color', 'bw'); ?></th>
                 <th><?php esc_html_e('Border color', 'bw'); ?></th>
                 <th><?php esc_html_e('Text color', 'bw'); ?></th>
@@ -952,8 +968,17 @@ function bw_link_page_render_settings_tab($settings, $pages, $logo_url)
                         <td style="text-align:center;vertical-align:middle;">
                             <span class="bw-link-page-drag-handle" aria-label="<?php esc_attr_e('Drag to reorder', 'bw'); ?>" title="<?php esc_attr_e('Drag to reorder', 'bw'); ?>" style="cursor:move;display:inline-block;font-size:18px;line-height:1;color:#2271b1;">&#8801;</span>
                         </td>
+                        <td><label><input type="checkbox" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[links][<?php echo esc_attr((string) $index); ?>][enabled]" value="1" <?php checked(!isset($link['enabled']) || !empty($link['enabled'])); ?>> <?php esc_html_e('On', 'bw'); ?></label></td>
+                        <td>
+                            <select name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[links][<?php echo esc_attr((string) $index); ?>][link_type]">
+                                <option value="url" <?php selected(!isset($link['link_type']) || 'email' !== $link['link_type']); ?>><?php esc_html_e('URL', 'bw'); ?></option>
+                                <option value="email" <?php selected(isset($link['link_type']) && 'email' === $link['link_type']); ?>><?php esc_html_e('Email contact', 'bw'); ?></option>
+                            </select>
+                        </td>
                         <td><input type="text" class="regular-text" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[links][<?php echo esc_attr((string) $index); ?>][label]" value="<?php echo esc_attr($link['label']); ?>"></td>
                         <td><input type="url" class="regular-text" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[links][<?php echo esc_attr((string) $index); ?>][url]" value="<?php echo esc_attr($link['url']); ?>"></td>
+                        <td><input type="email" class="regular-text" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[links][<?php echo esc_attr((string) $index); ?>][email]" value="<?php echo esc_attr(isset($link['email']) ? (string) $link['email'] : ''); ?>" placeholder="name@example.com"></td>
+                        <td><label><input type="checkbox" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[links][<?php echo esc_attr((string) $index); ?>][show_mail_icon]" value="1" <?php checked(!isset($link['show_mail_icon']) || !empty($link['show_mail_icon'])); ?>> <?php esc_html_e('Show', 'bw'); ?></label></td>
                         <td><input type="text" class="bw-link-page-color-field" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[links][<?php echo esc_attr((string) $index); ?>][button_color]" value="<?php echo esc_attr(isset($link['button_color']) ? (string) $link['button_color'] : ''); ?>" placeholder="<?php esc_attr_e('Default', 'bw'); ?>"></td>
                         <td><input type="text" class="bw-link-page-color-field" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[links][<?php echo esc_attr((string) $index); ?>][border_color]" value="<?php echo esc_attr(isset($link['border_color']) ? (string) $link['border_color'] : ''); ?>" placeholder="<?php esc_attr_e('Default', 'bw'); ?>"></td>
                         <td><input type="text" class="bw-link-page-color-field" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[links][<?php echo esc_attr((string) $index); ?>][text_color]" value="<?php echo esc_attr(isset($link['text_color']) ? (string) $link['text_color'] : ''); ?>" placeholder="<?php esc_attr_e('Default', 'bw'); ?>"></td>

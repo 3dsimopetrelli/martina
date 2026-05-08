@@ -64,8 +64,23 @@ $js_url = plugin_dir_url(__FILE__) . '../assets/link-page.js';
 
 $render_links = [];
 foreach ($links as $index => $link) {
+    $enabled = !isset($link['enabled']) || !empty($link['enabled']);
+    if (!$enabled) {
+        continue;
+    }
+
+    $link_type = isset($link['link_type']) && 'email' === $link['link_type'] ? 'email' : 'url';
     $label = isset($link['label']) ? (string) $link['label'] : '';
     $url = isset($link['url']) ? (string) $link['url'] : '';
+    $email = isset($link['email']) ? sanitize_email((string) $link['email']) : '';
+    $show_mail_icon = !isset($link['show_mail_icon']) || !empty($link['show_mail_icon']);
+    if ('email' === $link_type) {
+        if ('' === $label || '' === $email) {
+            continue;
+        }
+        $url = 'mailto:' . $email;
+    }
+
     if ('' === $label || '' === $url) {
         continue;
     }
@@ -94,6 +109,9 @@ foreach ($links as $index => $link) {
         'rel' => $rel,
         'link_id' => $link_id,
         'link_style' => implode(';', $link_style_parts),
+        'type' => $link_type,
+        'email' => $email,
+        'show_mail_icon' => $show_mail_icon,
     ];
 }
 
@@ -309,14 +327,22 @@ if ($background_gradient_enabled) {
 
         <div class="links">
             <?php foreach ($render_links as $render_link) : ?>
-                <a class="link-item"
+                <a class="link-item<?php echo 'email' === $render_link['type'] ? ' link-item--email' : ''; ?>"
                     href="<?php echo esc_url($render_link['url']); ?>"
                     target="<?php echo esc_attr($render_link['target']); ?>"
                     data-bw-link-id="<?php echo esc_attr($render_link['link_id']); ?>"
                     data-bw-link-label="<?php echo esc_attr($render_link['label']); ?>"
                     <?php echo '' !== $render_link['link_style'] ? ' style="' . esc_attr($render_link['link_style']) . '"' : ''; ?>
                     <?php echo '' !== $render_link['rel'] ? ' rel="' . esc_attr($render_link['rel']) . '"' : ''; ?>>
-                    <?php echo esc_html($render_link['label']); ?>
+                    <?php if ('email' === $render_link['type']) : ?>
+                        <span class="link-item-email-title">
+                            <?php if (!empty($render_link['show_mail_icon'])) : ?><span class="link-item-email-icon" aria-hidden="true">&#9993;</span><?php endif; ?>
+                            <span><?php echo esc_html($render_link['label']); ?></span>
+                        </span>
+                        <span class="link-item-email-address"><?php echo esc_html($render_link['email']); ?></span>
+                    <?php else : ?>
+                        <?php echo esc_html($render_link['label']); ?>
+                    <?php endif; ?>
                 </a>
             <?php endforeach; ?>
         </div>
