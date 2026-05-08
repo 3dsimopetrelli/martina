@@ -315,16 +315,32 @@ body {
 .link-item {
     display: block;
     width: 100%;
-    padding: 15px 20px;
-    border: 1px solid var(--bw-link-button-border, var(--bw-link-border));
+    padding: 18px 26px;
+    border: 3px solid var(--bw-link-button-border, #111111);
     background: var(--bw-link-button-bg, transparent);
-    border-radius: 50px;
+    border-radius: 24px;
     color: var(--bw-link-button-text, var(--bw-link-text));
     text-decoration: none;
-    font-size: 16px;
-    font-weight: 600;
+    font-size: 40px;
+    font-weight: 500;
     line-height: 1.2;
-    transition: opacity 0.16s ease, border-color 0.16s ease, background-color 0.16s ease;
+    letter-spacing: 0.01em;
+    text-align: center;
+    position: relative;
+    z-index: 1;
+    transition: transform 0.14s ease, opacity 0.16s ease, border-color 0.16s ease, background-color 0.16s ease;
+}
+
+.link-item::after {
+    content: "";
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: -9px;
+    height: 12px;
+    background: #000000;
+    border-radius: 0 0 18px 18px;
+    z-index: -1;
 }
 
 @keyframes bw-link-logo-spin {
@@ -360,7 +376,7 @@ body {
 }
 
 .link-item:hover {
-    opacity: 0.9;
+    opacity: 0.96;
 }
 
 .link-item:focus-visible {
@@ -370,7 +386,11 @@ body {
 }
 
 .link-item:active {
-    opacity: 0.84;
+    transform: translateY(3px);
+}
+
+.link-item:active::after {
+    bottom: -6px;
 }
 
 .socials {
@@ -430,6 +450,11 @@ body {
         width: 14px;
         height: 14px;
         min-width: 14px;
+    }
+
+    .link-item {
+        font-size: 34px;
+        padding: 16px 18px;
     }
 }
 
