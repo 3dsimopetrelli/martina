@@ -16,6 +16,31 @@ if (!defined('BW_LINK_PAGE_LOCAL_URL_WARNING_TRANSIENT_PREFIX')) {
 }
 
 /**
+ * Sanitize a CSS color token, allowing hex and rgba/rgb values.
+ *
+ * @param string $color Raw color value.
+ * @return string
+ */
+function bw_link_page_sanitize_css_color($color)
+{
+    $color = trim((string) $color);
+    if ('' === $color) {
+        return '';
+    }
+
+    $hex = sanitize_hex_color($color);
+    if (is_string($hex) && '' !== $hex) {
+        return $hex;
+    }
+
+    if (preg_match('/^rgba?\(\s*(\d|[1-9]\d|1\d\d|2[0-4]\d|25[0-5])\s*,\s*(\d|[1-9]\d|1\d\d|2[0-4]\d|25[0-5])\s*,\s*(\d|[1-9]\d|1\d\d|2[0-4]\d|25[0-5])(?:\s*,\s*(0|0?\.\d+|1(?:\.0+)?)\s*)?\)$/i', $color)) {
+        return $color;
+    }
+
+    return '';
+}
+
+/**
  * Return normalized Link Page settings.
  *
  * @return array<string,mixed>
@@ -156,9 +181,9 @@ function bw_link_page_sanitize_settings($raw)
             $label = isset($link['label']) ? sanitize_text_field($link['label']) : '';
             $url = isset($link['url']) ? esc_url_raw($link['url']) : '';
             $target = !empty($link['target']) ? 1 : 0;
-            $button_color = isset($link['button_color']) ? sanitize_hex_color((string) $link['button_color']) : '';
-            $border_color = isset($link['border_color']) ? sanitize_hex_color((string) $link['border_color']) : '';
-            $text_color = isset($link['text_color']) ? sanitize_hex_color((string) $link['text_color']) : '';
+            $button_color = isset($link['button_color']) ? bw_link_page_sanitize_css_color((string) $link['button_color']) : '';
+            $border_color = isset($link['border_color']) ? bw_link_page_sanitize_css_color((string) $link['border_color']) : '';
+            $text_color = isset($link['text_color']) ? bw_link_page_sanitize_css_color((string) $link['text_color']) : '';
 
             if ('' === $label || '' === $url) {
                 continue;

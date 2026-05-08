@@ -73,9 +73,9 @@ foreach ($links as $index => $link) {
     $target = !empty($link['target']) ? '_blank' : '_self';
     $rel = '_blank' === $target ? 'noopener noreferrer' : '';
     $link_id = function_exists('bw_link_page_build_link_id') ? bw_link_page_build_link_id($link, $index) : ('link-' . (string) $index);
-    $button_color = isset($link['button_color']) ? sanitize_hex_color((string) $link['button_color']) : '';
-    $border_color = isset($link['border_color']) ? sanitize_hex_color((string) $link['border_color']) : '';
-    $text_color = isset($link['text_color']) ? sanitize_hex_color((string) $link['text_color']) : '';
+    $button_color = isset($link['button_color']) ? (function_exists('bw_link_page_sanitize_css_color') ? bw_link_page_sanitize_css_color((string) $link['button_color']) : (string) sanitize_hex_color((string) $link['button_color'])) : '';
+    $border_color = isset($link['border_color']) ? (function_exists('bw_link_page_sanitize_css_color') ? bw_link_page_sanitize_css_color((string) $link['border_color']) : (string) sanitize_hex_color((string) $link['border_color'])) : '';
+    $text_color = isset($link['text_color']) ? (function_exists('bw_link_page_sanitize_css_color') ? bw_link_page_sanitize_css_color((string) $link['text_color']) : (string) sanitize_hex_color((string) $link['text_color'])) : '';
     $link_style_parts = [];
     if (!empty($button_color)) {
         $link_style_parts[] = '--bw-link-button-bg:' . $button_color;
