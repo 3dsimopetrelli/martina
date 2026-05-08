@@ -485,6 +485,10 @@ if (file_exists(plugin_dir_path(__FILE__) . 'includes/modules/elementor-sticky-s
     require_once plugin_dir_path(__FILE__) . 'includes/modules/elementor-sticky-sidebar/elementor-sticky-sidebar-module.php';
 }
 
+if (file_exists(plugin_dir_path(__FILE__) . 'includes/modules/link-page/link-page-module.php')) {
+    require_once plugin_dir_path(__FILE__) . 'includes/modules/link-page/link-page-module.php';
+}
+
 // Checkout fields manager (admin + frontend)
 $bw_checkout_fields_admin = plugin_dir_path(__FILE__) . 'includes/admin/checkout-fields/class-bw-checkout-fields-admin.php';
 $bw_checkout_fields_frontend = plugin_dir_path(__FILE__) . 'includes/admin/checkout-fields/class-bw-checkout-fields-frontend.php';
