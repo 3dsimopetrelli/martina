@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Blackwork Core Plugin
  * Description: Custom Elementor widgets and runtime modules for Blackwork Core.
- * Version: 4.0.0
+ * Version: 5.0.0
  * Author: Simone Zanone & Mattia Maragno
  */
 
@@ -19,7 +19,7 @@ if (!defined('BW_MEW_PATH')) {
 }
 
 if (!defined('BLACKWORK_PLUGIN_VERSION')) {
-    define('BLACKWORK_PLUGIN_VERSION', '4.0.0');
+    define('BLACKWORK_PLUGIN_VERSION', '5.0.0');
 }
 
 /**
