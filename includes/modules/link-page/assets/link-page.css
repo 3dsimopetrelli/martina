@@ -196,18 +196,24 @@ body {
     transform: none;
 }
 
-.newsletter-form.is-ready .newsletter-submit {
+.newsletter-form.is-ready .newsletter-submit,
+.newsletter-form.is-ready button.newsletter-submit,
+.newsletter-form.is-ready button[type="submit"].newsletter-submit {
     background: #ff00b9;
     color: #ffffff;
     opacity: 1;
     cursor: pointer;
 }
 
-.newsletter-form.is-ready .newsletter-submit:hover {
+.newsletter-form.is-ready .newsletter-submit:hover,
+.newsletter-form.is-ready button.newsletter-submit:hover,
+.newsletter-form.is-ready button[type="submit"].newsletter-submit:hover {
     transform: translateY(-1px);
 }
 
-.newsletter-form.is-ready .newsletter-submit:active {
+.newsletter-form.is-ready .newsletter-submit:active,
+.newsletter-form.is-ready button.newsletter-submit:active,
+.newsletter-form.is-ready button[type="submit"].newsletter-submit:active {
     transform: translateY(0);
 }
 
