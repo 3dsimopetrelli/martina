@@ -32,6 +32,7 @@ $background_image_id = isset($settings['background_image_id']) ? (int) $settings
 $background_image_url = $background_image_id > 0 ? wp_get_attachment_image_url($background_image_id, 'full') : '';
 $logo_width = isset($settings['logo_width']) ? absint($settings['logo_width']) : 180;
 $logo_width = max(40, min(600, $logo_width));
+$logo_round_enabled = !empty($settings['logo_round']);
 $logo_rotate_enabled = !empty($settings['logo_rotate']);
 $logo_rotate_speed = isset($settings['logo_rotate_speed']) && is_numeric($settings['logo_rotate_speed']) ? (float) $settings['logo_rotate_speed'] : 18.0;
 $logo_rotate_speed = max(2.0, min(120.0, $logo_rotate_speed));
@@ -64,12 +65,16 @@ foreach ($links as $index => $link) {
     $link_id = function_exists('bw_link_page_build_link_id') ? bw_link_page_build_link_id($link, $index) : ('link-' . (string) $index);
     $button_color = isset($link['button_color']) ? sanitize_hex_color((string) $link['button_color']) : '';
     $border_color = isset($link['border_color']) ? sanitize_hex_color((string) $link['border_color']) : '';
+    $text_color = isset($link['text_color']) ? sanitize_hex_color((string) $link['text_color']) : '';
     $link_style_parts = [];
     if (!empty($button_color)) {
         $link_style_parts[] = '--bw-link-button-bg:' . $button_color;
     }
     if (!empty($border_color)) {
         $link_style_parts[] = '--bw-link-button-border:' . $border_color;
+    }
+    if (!empty($text_color)) {
+        $link_style_parts[] = '--bw-link-button-text:' . $text_color;
     }
 
     $render_links[] = [
@@ -154,6 +159,9 @@ $frontend_config = [
 $body_classes = [];
 if ($logo_rotate_enabled) {
     $body_classes[] = 'bw-link-page-logo-rotate';
+}
+if ($logo_round_enabled) {
+    $body_classes[] = 'bw-link-page-logo-round';
 }
 
 $body_style = sprintf(

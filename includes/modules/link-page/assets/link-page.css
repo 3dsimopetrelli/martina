@@ -61,6 +61,10 @@ body {
     margin: 0 auto;
 }
 
+.bw-link-page-logo-round .logo img {
+    border-radius: 50%;
+}
+
 .bw-link-page-logo-rotate .logo img {
     animation: bw-link-logo-spin var(--bw-link-logo-rotate-duration) linear infinite;
     transform-origin: center;
@@ -310,7 +314,7 @@ body {
     border: 1px solid var(--bw-link-button-border, var(--bw-link-border));
     background: var(--bw-link-button-bg, transparent);
     border-radius: 50px;
-    color: var(--bw-link-text);
+    color: var(--bw-link-button-text, var(--bw-link-text));
     text-decoration: none;
     font-size: 16px;
     font-weight: 600;

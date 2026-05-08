@@ -38,6 +38,7 @@ function bw_link_page_get_settings()
         'background_color' => '#0f0f0f',
         'background_image_id' => 0,
         'logo_width' => 180,
+        'logo_round' => 0,
         'logo_rotate' => 0,
         'logo_rotate_speed' => 18,
         'links' => [],
@@ -113,6 +114,7 @@ function bw_link_page_sanitize_settings($raw)
         'background_color' => $background_color,
         'background_image_id' => isset($raw['background_image_id']) ? absint($raw['background_image_id']) : 0,
         'logo_width' => $logo_width,
+        'logo_round' => !empty($raw['logo_round']) ? 1 : 0,
         'logo_rotate' => !empty($raw['logo_rotate']) ? 1 : 0,
         'logo_rotate_speed' => $logo_rotate_speed,
         'links' => [],
@@ -130,6 +132,7 @@ function bw_link_page_sanitize_settings($raw)
             $target = !empty($link['target']) ? 1 : 0;
             $button_color = isset($link['button_color']) ? sanitize_hex_color((string) $link['button_color']) : '';
             $border_color = isset($link['border_color']) ? sanitize_hex_color((string) $link['border_color']) : '';
+            $text_color = isset($link['text_color']) ? sanitize_hex_color((string) $link['text_color']) : '';
 
             if ('' === $label || '' === $url) {
                 continue;
@@ -141,6 +144,7 @@ function bw_link_page_sanitize_settings($raw)
                 'target' => $target,
                 'button_color' => is_string($button_color) ? $button_color : '',
                 'border_color' => is_string($border_color) ? $border_color : '',
+                'text_color' => is_string($text_color) ? $text_color : '',
             ];
         }
     }
@@ -637,7 +641,7 @@ function bw_link_page_render_settings_tab($settings, $pages, $logo_url)
     $newsletter_image_url = $newsletter_image_id > 0 ? wp_get_attachment_image_url($newsletter_image_id, 'large') : '';
     $social_links = isset($settings['social_links']) && is_array($settings['social_links']) ? $settings['social_links'] : [];
     ?>
-    <form method="post" action="options.php" class="bw-site-settings-form" style="max-width: 980px;">
+    <form method="post" action="options.php" class="bw-site-settings-form" style="max-width: 1180px;">
         <?php settings_fields('bw_link_page_settings_group'); ?>
 
         <section class="bw-admin-card">
@@ -696,6 +700,15 @@ function bw_link_page_render_settings_tab($settings, $pages, $logo_url)
                         </label>
                         <label for="bw-link-page-logo-rotate-speed"><?php esc_html_e('Rotation speed (seconds)', 'bw'); ?></label><br>
                         <input type="number" min="2" max="120" step="0.1" id="bw-link-page-logo-rotate-speed" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[logo_rotate_speed]" value="<?php echo esc_attr((string) $settings['logo_rotate_speed']); ?>">
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><?php esc_html_e('Border radius', 'bw'); ?></th>
+                    <td>
+                        <label>
+                            <input type="checkbox" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[logo_round]" value="1" <?php checked(!empty($settings['logo_round'])); ?>>
+                            <?php esc_html_e('Apply 50% border radius (circular logo)', 'bw'); ?>
+                        </label>
                     </td>
                 </tr>
                 </tbody>
@@ -837,7 +850,7 @@ function bw_link_page_render_settings_tab($settings, $pages, $logo_url)
         <section class="bw-admin-card">
             <h2 class="bw-admin-card-title"><?php esc_html_e('Links', 'bw'); ?></h2>
             <p class="bw-admin-card-helper"><?php esc_html_e('Drag rows to reorder how buttons appear on the frontend.', 'bw'); ?></p>
-            <table class="bw-admin-table bw-admin-table--wide-middle" id="bw-link-page-links-table" style="max-width:980px;">
+            <table class="bw-admin-table bw-admin-table--wide-middle" id="bw-link-page-links-table" style="max-width:1180px;">
             <thead>
             <tr>
                 <th style="width:44px;"></th>
@@ -845,6 +858,7 @@ function bw_link_page_render_settings_tab($settings, $pages, $logo_url)
                 <th><?php esc_html_e('URL', 'bw'); ?></th>
                 <th><?php esc_html_e('Button color', 'bw'); ?></th>
                 <th><?php esc_html_e('Border color', 'bw'); ?></th>
+                <th><?php esc_html_e('Text color', 'bw'); ?></th>
                 <th><?php esc_html_e('Open in new tab', 'bw'); ?></th>
                 <th><?php esc_html_e('Action', 'bw'); ?></th>
             </tr>
@@ -860,6 +874,7 @@ function bw_link_page_render_settings_tab($settings, $pages, $logo_url)
                         <td><input type="url" class="regular-text" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[links][<?php echo esc_attr((string) $index); ?>][url]" value="<?php echo esc_attr($link['url']); ?>"></td>
                         <td><input type="text" class="bw-link-page-color-field" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[links][<?php echo esc_attr((string) $index); ?>][button_color]" value="<?php echo esc_attr(isset($link['button_color']) ? (string) $link['button_color'] : ''); ?>" placeholder="<?php esc_attr_e('Default', 'bw'); ?>"></td>
                         <td><input type="text" class="bw-link-page-color-field" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[links][<?php echo esc_attr((string) $index); ?>][border_color]" value="<?php echo esc_attr(isset($link['border_color']) ? (string) $link['border_color'] : ''); ?>" placeholder="<?php esc_attr_e('Default', 'bw'); ?>"></td>
+                        <td><input type="text" class="bw-link-page-color-field" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[links][<?php echo esc_attr((string) $index); ?>][text_color]" value="<?php echo esc_attr(isset($link['text_color']) ? (string) $link['text_color'] : ''); ?>" placeholder="<?php esc_attr_e('Default', 'bw'); ?>"></td>
                         <td><label><input type="checkbox" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[links][<?php echo esc_attr((string) $index); ?>][target]" value="1" <?php checked(!empty($link['target'])); ?>> _blank</label></td>
                         <td><button type="button" class="button bw-link-page-remove-link"><?php esc_html_e('Remove', 'bw'); ?></button></td>
                     </tr>

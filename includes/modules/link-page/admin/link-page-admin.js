@@ -39,6 +39,7 @@
                 '<td><input type="url" class="regular-text" name="' + optionKey + '[links][' + index + '][url]" value=""></td>' +
                 '<td><input type="text" class="bw-link-page-color-field" name="' + optionKey + '[links][' + index + '][button_color]" value="" placeholder="Default"></td>' +
                 '<td><input type="text" class="bw-link-page-color-field" name="' + optionKey + '[links][' + index + '][border_color]" value="" placeholder="Default"></td>' +
+                '<td><input type="text" class="bw-link-page-color-field" name="' + optionKey + '[links][' + index + '][text_color]" value="" placeholder="Default"></td>' +
                 '<td><label><input type="checkbox" name="' + optionKey + '[links][' + index + '][target]" value="1"> _blank</label></td>' +
                 '<td><button type="button" class="button bw-link-page-remove-link">Remove</button></td>';
 
