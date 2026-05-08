@@ -326,23 +326,17 @@ body {
     line-height: 1;
     letter-spacing: 0.01em;
     position: relative;
-    z-index: 0;
-    isolation: isolate;
+    z-index: 1;
     overflow: visible;
     display: flex;
     align-items: center;
     justify-content: center;
+    box-shadow: 5px 6px 0 0 #000000;
     transition: transform 0.12s ease, opacity 0.12s ease;
 }
 
 .link-item::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: #000000;
-    border-radius: inherit;
-    transform: translate(5px, 6px);
-    z-index: -1;
+    content: none;
 }
 
 @keyframes bw-link-logo-spin {
@@ -388,10 +382,11 @@ body {
 
 .link-item:active {
     transform: translate(2px, 2px);
+    box-shadow: 3px 4px 0 0 #000000;
 }
 
 .link-item:active::after {
-    transform: translate(3px, 4px);
+    content: none;
 }
 
 .socials {
@@ -461,7 +456,7 @@ body {
     }
 
     .link-item::after {
-        transform: translate(4px, 5px);
+        content: none;
     }
 }
 
