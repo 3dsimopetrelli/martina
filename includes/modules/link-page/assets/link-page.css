@@ -476,7 +476,9 @@ body {
         padding: 3px;
     }
 
-    .newsletter-submit {
+    .newsletter-form .newsletter-submit,
+    .newsletter-form button.newsletter-submit,
+    .newsletter-form button[type="submit"].newsletter-submit {
         min-width: 0;
         padding: 12px 18px;
         font-size: 15px;
