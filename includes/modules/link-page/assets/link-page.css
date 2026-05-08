@@ -160,7 +160,9 @@ body {
     border-color: transparent;
 }
 
-.newsletter-submit {
+.newsletter-form .newsletter-submit,
+.newsletter-form button.newsletter-submit,
+.newsletter-form button[type="submit"].newsletter-submit {
     border: 2px solid #111111;
     background: var(--bw-newsletter-button-bg);
     color: var(--bw-newsletter-button-text);
@@ -174,13 +176,21 @@ body {
     cursor: default;
     opacity: 1;
     transition: background-color 0.18s ease, color 0.18s ease, opacity 0.18s ease, transform 0.18s ease;
+    box-shadow: none;
+    text-decoration: none;
+    appearance: none;
+    -webkit-appearance: none;
 }
 
-.newsletter-submit:hover {
+.newsletter-form .newsletter-submit:hover,
+.newsletter-form button.newsletter-submit:hover,
+.newsletter-form button[type="submit"].newsletter-submit:hover {
     opacity: 0.86;
 }
 
-.newsletter-submit:disabled {
+.newsletter-form .newsletter-submit:disabled,
+.newsletter-form button.newsletter-submit:disabled,
+.newsletter-form button[type="submit"].newsletter-submit:disabled {
     opacity: 0.72;
     cursor: default;
     transform: none;
