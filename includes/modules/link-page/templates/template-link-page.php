@@ -129,7 +129,7 @@ $should_load_newsletter_js = $newsletter_enabled;
 $newsletter_consent_required = true;
 $newsletter_consent_prefix = __('I agree to the', 'bw');
 $newsletter_privacy_link_label = __('Privacy Policy', 'bw');
-$newsletter_privacy_url = function_exists('get_privacy_policy_url') ? get_privacy_policy_url() : '';
+$newsletter_privacy_url = 'https://martinasarritzu.com/?page_id=3';
 $newsletter_messages = [
     'emptyEmail' => __('Please enter your email address.', 'bw'),
     'invalidEmail' => __('Please enter a valid email address.', 'bw'),
@@ -150,9 +150,7 @@ if (class_exists('BW_Mail_Marketing_Settings')) {
     if (!empty($subscription_settings['privacy_link_label'])) {
         $newsletter_privacy_link_label = (string) $subscription_settings['privacy_link_label'];
     }
-    if (!empty($subscription_settings['privacy_url'])) {
-        $newsletter_privacy_url = (string) $subscription_settings['privacy_url'];
-    }
+    // Keep Link Page privacy destination fixed to the requested page.
 
     $configured_messages_map = [
         'empty_email_message' => 'emptyEmail',
