@@ -29,6 +29,9 @@ $page_id = isset($settings['page_id']) ? (int) $settings['page_id'] : 0;
 $background_color = isset($settings['background_color']) ? sanitize_hex_color((string) $settings['background_color']) : '#0f0f0f';
 $background_color = $background_color ? $background_color : '#0f0f0f';
 $background_gradient_enabled = !isset($settings['background_gradient_enabled']) || !empty($settings['background_gradient_enabled']);
+$background_gradient_animated = !isset($settings['background_gradient_animated']) || !empty($settings['background_gradient_animated']);
+$background_gradient_opacity = isset($settings['background_gradient_opacity']) && is_numeric($settings['background_gradient_opacity']) ? (float) $settings['background_gradient_opacity'] : 0.6;
+$background_gradient_opacity = max(0.0, min(1.0, $background_gradient_opacity));
 $background_gradient_start = isset($settings['background_gradient_start']) ? sanitize_hex_color((string) $settings['background_gradient_start']) : '';
 $background_gradient_start = $background_gradient_start ? $background_gradient_start : '#de8cf8';
 $background_gradient_mid = isset($settings['background_gradient_mid']) ? sanitize_hex_color((string) $settings['background_gradient_mid']) : '';
@@ -170,6 +173,9 @@ if ($logo_rotate_enabled) {
 if ($logo_round_enabled) {
     $body_classes[] = 'bw-link-page-logo-round';
 }
+if ($background_gradient_enabled && $background_gradient_animated) {
+    $body_classes[] = 'bw-link-page-gradient-animated';
+}
 
 $body_style = sprintf(
     '--bw-link-bg:%1$s;--bw-link-logo-width:%2$spx;--bw-link-logo-rotate-duration:%3$ss;',
@@ -178,11 +184,44 @@ $body_style = sprintf(
     rtrim(rtrim(number_format($logo_rotate_speed, 1, '.', ''), '0'), '.')
 );
 
+/**
+ * @param string $hex
+ * @param float $alpha
+ * @return string
+ */
+$bw_link_page_hex_to_rgba = static function ($hex, $alpha) {
+    $hex = ltrim((string) $hex, '#');
+    if (3 === strlen($hex)) {
+        $hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+    }
+    if (6 !== strlen($hex)) {
+        return 'rgba(0,0,0,' . number_format((float) $alpha, 2, '.', '') . ')';
+    }
+
+    $r = hexdec(substr($hex, 0, 2));
+    $g = hexdec(substr($hex, 2, 2));
+    $b = hexdec(substr($hex, 4, 2));
+
+    return sprintf(
+        'rgba(%1$d,%2$d,%3$d,%4$s)',
+        (int) $r,
+        (int) $g,
+        (int) $b,
+        number_format((float) $alpha, 2, '.', '')
+    );
+};
+
 if (!empty($background_image_url)) {
     $body_style .= '--bw-link-bg-image:url(' . esc_url_raw($background_image_url) . ');';
 }
 if ($background_gradient_enabled) {
-    $body_style .= '--bw-link-bg-gradient:linear-gradient(90deg,' . esc_attr($background_gradient_start) . ' 0%,' . esc_attr($background_gradient_mid) . ' 50%,' . esc_attr($background_gradient_end) . ' 100%);';
+    $body_style .= '--bw-link-bg-gradient:linear-gradient(90deg,'
+        . esc_attr($bw_link_page_hex_to_rgba($background_gradient_start, $background_gradient_opacity))
+        . ' 0%,'
+        . esc_attr($bw_link_page_hex_to_rgba($background_gradient_mid, $background_gradient_opacity))
+        . ' 50%,'
+        . esc_attr($bw_link_page_hex_to_rgba($background_gradient_end, $background_gradient_opacity))
+        . ' 100%);';
 }
 ?>
 <!doctype html>

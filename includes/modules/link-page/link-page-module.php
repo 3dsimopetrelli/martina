@@ -38,6 +38,8 @@ function bw_link_page_get_settings()
         'background_color' => '#0f0f0f',
         'background_image_id' => 0,
         'background_gradient_enabled' => 1,
+        'background_gradient_animated' => 1,
+        'background_gradient_opacity' => 0.6,
         'background_gradient_start' => '#de8cf8',
         'background_gradient_mid' => '#a6b2e8',
         'background_gradient_end' => '#73d6dc',
@@ -107,6 +109,8 @@ function bw_link_page_sanitize_settings($raw)
     if ('' === $background_gradient_end || null === $background_gradient_end) {
         $background_gradient_end = '#73d6dc';
     }
+    $background_gradient_opacity = isset($raw['background_gradient_opacity']) && is_numeric($raw['background_gradient_opacity']) ? (float) $raw['background_gradient_opacity'] : 0.6;
+    $background_gradient_opacity = max(0.0, min(1.0, $background_gradient_opacity));
 
     $logo_width = isset($raw['logo_width']) ? absint($raw['logo_width']) : 180;
     $logo_width = max(40, min(600, $logo_width));
@@ -130,6 +134,8 @@ function bw_link_page_sanitize_settings($raw)
         'background_color' => $background_color,
         'background_image_id' => isset($raw['background_image_id']) ? absint($raw['background_image_id']) : 0,
         'background_gradient_enabled' => !isset($raw['background_gradient_enabled']) || !empty($raw['background_gradient_enabled']) ? 1 : 0,
+        'background_gradient_animated' => !isset($raw['background_gradient_animated']) || !empty($raw['background_gradient_animated']) ? 1 : 0,
+        'background_gradient_opacity' => $background_gradient_opacity,
         'background_gradient_start' => $background_gradient_start,
         'background_gradient_mid' => $background_gradient_mid,
         'background_gradient_end' => $background_gradient_end,
@@ -767,7 +773,15 @@ function bw_link_page_render_settings_tab($settings, $pages, $logo_url)
                             <input type="checkbox" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[background_gradient_enabled]" value="1" <?php checked(!empty($settings['background_gradient_enabled'])); ?>>
                             <?php esc_html_e('Enable gradient overlay', 'bw'); ?>
                         </label>
+                        <label style="display:block;margin-bottom:10px;">
+                            <input type="checkbox" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[background_gradient_animated]" value="1" <?php checked(!empty($settings['background_gradient_animated'])); ?>>
+                            <?php esc_html_e('Animate gradient (soft left-right motion)', 'bw'); ?>
+                        </label>
                         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+                            <label>
+                                <span style="display:block;margin-bottom:4px;"><?php esc_html_e('Opacity (0-1)', 'bw'); ?></span>
+                                <input type="number" min="0" max="1" step="0.05" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[background_gradient_opacity]" value="<?php echo esc_attr((string) (isset($settings['background_gradient_opacity']) ? $settings['background_gradient_opacity'] : '0.6')); ?>">
+                            </label>
                             <label>
                                 <span style="display:block;margin-bottom:4px;"><?php esc_html_e('Start', 'bw'); ?></span>
                                 <input type="color" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[background_gradient_start]" value="<?php echo esc_attr(!empty($settings['background_gradient_start']) ? (string) $settings['background_gradient_start'] : '#de8cf8'); ?>">
