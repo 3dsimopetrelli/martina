@@ -954,9 +954,7 @@ function bw_link_page_render_settings_tab($settings, $pages, $logo_url)
                 <th><?php esc_html_e('URL', 'bw'); ?></th>
                 <th><?php esc_html_e('Email', 'bw'); ?></th>
                 <th><?php esc_html_e('Mail icon', 'bw'); ?></th>
-                <th><?php esc_html_e('Button color', 'bw'); ?></th>
-                <th><?php esc_html_e('Border color', 'bw'); ?></th>
-                <th><?php esc_html_e('Text color', 'bw'); ?></th>
+                <th><?php esc_html_e('Colors', 'bw'); ?></th>
                 <th><?php esc_html_e('Open in new tab', 'bw'); ?></th>
                 <th><?php esc_html_e('Action', 'bw'); ?></th>
             </tr>
@@ -976,13 +974,17 @@ function bw_link_page_render_settings_tab($settings, $pages, $logo_url)
                             </select>
                         </td>
                         <td><input type="text" class="regular-text" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[links][<?php echo esc_attr((string) $index); ?>][label]" value="<?php echo esc_attr($link['label']); ?>"></td>
-                        <td><input type="url" class="regular-text" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[links][<?php echo esc_attr((string) $index); ?>][url]" value="<?php echo esc_attr($link['url']); ?>"></td>
-                        <td><input type="email" class="regular-text" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[links][<?php echo esc_attr((string) $index); ?>][email]" value="<?php echo esc_attr(isset($link['email']) ? (string) $link['email'] : ''); ?>" placeholder="name@example.com"></td>
+                        <td class="bw-link-row-url"><input type="url" class="regular-text" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[links][<?php echo esc_attr((string) $index); ?>][url]" value="<?php echo esc_attr($link['url']); ?>"></td>
+                        <td class="bw-link-row-email"><input type="email" class="regular-text" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[links][<?php echo esc_attr((string) $index); ?>][email]" value="<?php echo esc_attr(isset($link['email']) ? (string) $link['email'] : ''); ?>" placeholder="name@example.com"></td>
                         <td><label><input type="checkbox" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[links][<?php echo esc_attr((string) $index); ?>][show_mail_icon]" value="1" <?php checked(!isset($link['show_mail_icon']) || !empty($link['show_mail_icon'])); ?>> <?php esc_html_e('Show', 'bw'); ?></label></td>
-                        <td><input type="text" class="bw-link-page-color-field" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[links][<?php echo esc_attr((string) $index); ?>][button_color]" value="<?php echo esc_attr(isset($link['button_color']) ? (string) $link['button_color'] : ''); ?>" placeholder="<?php esc_attr_e('Default', 'bw'); ?>"></td>
-                        <td><input type="text" class="bw-link-page-color-field" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[links][<?php echo esc_attr((string) $index); ?>][border_color]" value="<?php echo esc_attr(isset($link['border_color']) ? (string) $link['border_color'] : ''); ?>" placeholder="<?php esc_attr_e('Default', 'bw'); ?>"></td>
-                        <td><input type="text" class="bw-link-page-color-field" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[links][<?php echo esc_attr((string) $index); ?>][text_color]" value="<?php echo esc_attr(isset($link['text_color']) ? (string) $link['text_color'] : ''); ?>" placeholder="<?php esc_attr_e('Default', 'bw'); ?>"></td>
-                        <td><label><input type="checkbox" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[links][<?php echo esc_attr((string) $index); ?>][target]" value="1" <?php checked(!empty($link['target'])); ?>> _blank</label></td>
+                        <td>
+                            <div style="display:grid;gap:6px;min-width:220px;">
+                                <label style="display:grid;grid-template-columns:92px 1fr;align-items:center;gap:8px;"><span><?php esc_html_e('Button', 'bw'); ?></span><input type="text" class="bw-link-page-color-field" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[links][<?php echo esc_attr((string) $index); ?>][button_color]" value="<?php echo esc_attr(isset($link['button_color']) ? (string) $link['button_color'] : ''); ?>" placeholder="<?php esc_attr_e('Default', 'bw'); ?>"></label>
+                                <label style="display:grid;grid-template-columns:92px 1fr;align-items:center;gap:8px;"><span><?php esc_html_e('Shadow', 'bw'); ?></span><input type="text" class="bw-link-page-color-field" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[links][<?php echo esc_attr((string) $index); ?>][border_color]" value="<?php echo esc_attr(isset($link['border_color']) ? (string) $link['border_color'] : ''); ?>" placeholder="<?php esc_attr_e('Default', 'bw'); ?>"></label>
+                                <label style="display:grid;grid-template-columns:92px 1fr;align-items:center;gap:8px;"><span><?php esc_html_e('Text', 'bw'); ?></span><input type="text" class="bw-link-page-color-field" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[links][<?php echo esc_attr((string) $index); ?>][text_color]" value="<?php echo esc_attr(isset($link['text_color']) ? (string) $link['text_color'] : ''); ?>" placeholder="<?php esc_attr_e('Default', 'bw'); ?>"></label>
+                            </div>
+                        </td>
+                        <td class="bw-link-row-target"><label><input type="checkbox" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[links][<?php echo esc_attr((string) $index); ?>][target]" value="1" <?php checked(!empty($link['target'])); ?>> _blank</label></td>
                         <td><button type="button" class="button bw-link-page-remove-link"><?php esc_html_e('Remove', 'bw'); ?></button></td>
                     </tr>
                 <?php endforeach; ?>

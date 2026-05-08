@@ -38,16 +38,59 @@
                 '<td><label><input type="checkbox" name="' + optionKey + '[links][' + index + '][enabled]" value="1" checked> On</label></td>' +
                 '<td><select name="' + optionKey + '[links][' + index + '][link_type]"><option value="url" selected>URL</option><option value="email">Email contact</option></select></td>' +
                 '<td><input type="text" class="regular-text" name="' + optionKey + '[links][' + index + '][label]" value=""></td>' +
-                '<td><input type="url" class="regular-text" name="' + optionKey + '[links][' + index + '][url]" value=""></td>' +
-                '<td><input type="email" class="regular-text" name="' + optionKey + '[links][' + index + '][email]" value="" placeholder="name@example.com"></td>' +
+                '<td class="bw-link-row-url"><input type="url" class="regular-text" name="' + optionKey + '[links][' + index + '][url]" value=""></td>' +
+                '<td class="bw-link-row-email"><input type="email" class="regular-text" name="' + optionKey + '[links][' + index + '][email]" value="" placeholder="name@example.com"></td>' +
                 '<td><label><input type="checkbox" name="' + optionKey + '[links][' + index + '][show_mail_icon]" value="1" checked> Show</label></td>' +
-                '<td><input type="text" class="bw-link-page-color-field" name="' + optionKey + '[links][' + index + '][button_color]" value="" placeholder="Default"></td>' +
-                '<td><input type="text" class="bw-link-page-color-field" name="' + optionKey + '[links][' + index + '][border_color]" value="" placeholder="Default"></td>' +
-                '<td><input type="text" class="bw-link-page-color-field" name="' + optionKey + '[links][' + index + '][text_color]" value="" placeholder="Default"></td>' +
-                '<td><label><input type="checkbox" name="' + optionKey + '[links][' + index + '][target]" value="1"> _blank</label></td>' +
+                '<td><div style="display:grid;gap:6px;min-width:220px;">' +
+                    '<label style="display:grid;grid-template-columns:92px 1fr;align-items:center;gap:8px;"><span>Button</span><input type="text" class="bw-link-page-color-field" name="' + optionKey + '[links][' + index + '][button_color]" value="" placeholder="Default"></label>' +
+                    '<label style="display:grid;grid-template-columns:92px 1fr;align-items:center;gap:8px;"><span>Shadow</span><input type="text" class="bw-link-page-color-field" name="' + optionKey + '[links][' + index + '][border_color]" value="" placeholder="Default"></label>' +
+                    '<label style="display:grid;grid-template-columns:92px 1fr;align-items:center;gap:8px;"><span>Text</span><input type="text" class="bw-link-page-color-field" name="' + optionKey + '[links][' + index + '][text_color]" value="" placeholder="Default"></label>' +
+                '</div></td>' +
+                '<td class="bw-link-row-target"><label><input type="checkbox" name="' + optionKey + '[links][' + index + '][target]" value="1"> _blank</label></td>' +
                 '<td><button type="button" class="button bw-link-page-remove-link">Remove</button></td>';
 
             return row;
+        }
+
+        function updateLinkRowType(row) {
+            if (!row) {
+                return;
+            }
+
+            var typeSelect = row.querySelector('select[name*="[link_type]"]');
+            var urlCell = row.querySelector('.bw-link-row-url');
+            var emailCell = row.querySelector('.bw-link-row-email');
+            var targetCell = row.querySelector('.bw-link-row-target');
+            var urlInput = urlCell ? urlCell.querySelector('input') : null;
+            var emailInput = emailCell ? emailCell.querySelector('input') : null;
+            var targetInput = targetCell ? targetCell.querySelector('input') : null;
+            var isEmail = !!(typeSelect && typeSelect.value === 'email');
+
+            if (urlCell) {
+                urlCell.style.display = isEmail ? 'none' : '';
+            }
+            if (targetCell) {
+                targetCell.style.display = isEmail ? 'none' : '';
+            }
+            if (emailCell) {
+                emailCell.style.display = isEmail ? '' : 'none';
+            }
+
+            if (urlInput) {
+                urlInput.disabled = isEmail;
+                if (isEmail) {
+                    urlInput.value = '';
+                }
+            }
+            if (targetInput) {
+                targetInput.disabled = isEmail;
+                if (isEmail) {
+                    targetInput.checked = false;
+                }
+            }
+            if (emailInput) {
+                emailInput.disabled = !isEmail;
+            }
         }
 
         function initColorPickers(scope) {
@@ -101,6 +144,7 @@
             addLinkButton.addEventListener('click', function () {
                 var newRow = createLinkRow(nextIndex(linksTableBody));
                 linksTableBody.appendChild(newRow);
+                updateLinkRowType(newRow);
                 initColorPickers(newRow);
                 reindexRows(linksTableBody, 'links');
             });
@@ -121,6 +165,21 @@
                     row.remove();
                     reindexRows(linksTableBody, 'links');
                 }
+            });
+
+            linksTableBody.addEventListener('change', function (event) {
+                var target = event.target;
+                if (!(target instanceof Element)) {
+                    return;
+                }
+                if (!target.matches('select[name*="[link_type]"]')) {
+                    return;
+                }
+                updateLinkRowType(target.closest('tr'));
+            });
+
+            linksTableBody.querySelectorAll('tr').forEach(function (row) {
+                updateLinkRowType(row);
             });
         }
 
