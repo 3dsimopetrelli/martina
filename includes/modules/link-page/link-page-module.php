@@ -37,6 +37,10 @@ function bw_link_page_get_settings()
         'newsletter_image_id' => 0,
         'background_color' => '#0f0f0f',
         'background_image_id' => 0,
+        'background_gradient_enabled' => 1,
+        'background_gradient_start' => '#de8cf8',
+        'background_gradient_mid' => '#a6b2e8',
+        'background_gradient_end' => '#73d6dc',
         'logo_width' => 180,
         'logo_round' => 0,
         'logo_rotate' => 0,
@@ -91,6 +95,18 @@ function bw_link_page_sanitize_settings($raw)
     if ('' === $background_color || null === $background_color) {
         $background_color = '#0f0f0f';
     }
+    $background_gradient_start = isset($raw['background_gradient_start']) ? sanitize_hex_color((string) $raw['background_gradient_start']) : '';
+    if ('' === $background_gradient_start || null === $background_gradient_start) {
+        $background_gradient_start = '#de8cf8';
+    }
+    $background_gradient_mid = isset($raw['background_gradient_mid']) ? sanitize_hex_color((string) $raw['background_gradient_mid']) : '';
+    if ('' === $background_gradient_mid || null === $background_gradient_mid) {
+        $background_gradient_mid = '#a6b2e8';
+    }
+    $background_gradient_end = isset($raw['background_gradient_end']) ? sanitize_hex_color((string) $raw['background_gradient_end']) : '';
+    if ('' === $background_gradient_end || null === $background_gradient_end) {
+        $background_gradient_end = '#73d6dc';
+    }
 
     $logo_width = isset($raw['logo_width']) ? absint($raw['logo_width']) : 180;
     $logo_width = max(40, min(600, $logo_width));
@@ -113,6 +129,10 @@ function bw_link_page_sanitize_settings($raw)
         'newsletter_image_id' => isset($raw['newsletter_image_id']) ? absint($raw['newsletter_image_id']) : 0,
         'background_color' => $background_color,
         'background_image_id' => isset($raw['background_image_id']) ? absint($raw['background_image_id']) : 0,
+        'background_gradient_enabled' => !isset($raw['background_gradient_enabled']) || !empty($raw['background_gradient_enabled']) ? 1 : 0,
+        'background_gradient_start' => $background_gradient_start,
+        'background_gradient_mid' => $background_gradient_mid,
+        'background_gradient_end' => $background_gradient_end,
         'logo_width' => $logo_width,
         'logo_round' => !empty($raw['logo_round']) ? 1 : 0,
         'logo_rotate' => !empty($raw['logo_rotate']) ? 1 : 0,
@@ -737,6 +757,29 @@ function bw_link_page_render_settings_tab($settings, $pages, $logo_url)
                             <?php if (!empty($background_image_url)) : ?>
                                 <img src="<?php echo esc_url($background_image_url); ?>" alt="" style="max-width:200px;height:auto;display:block;">
                             <?php endif; ?>
+                        </div>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><?php esc_html_e('Gradient overlay', 'bw'); ?></th>
+                    <td>
+                        <label style="display:block;margin-bottom:10px;">
+                            <input type="checkbox" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[background_gradient_enabled]" value="1" <?php checked(!empty($settings['background_gradient_enabled'])); ?>>
+                            <?php esc_html_e('Enable gradient overlay', 'bw'); ?>
+                        </label>
+                        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+                            <label>
+                                <span style="display:block;margin-bottom:4px;"><?php esc_html_e('Start', 'bw'); ?></span>
+                                <input type="color" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[background_gradient_start]" value="<?php echo esc_attr(!empty($settings['background_gradient_start']) ? (string) $settings['background_gradient_start'] : '#de8cf8'); ?>">
+                            </label>
+                            <label>
+                                <span style="display:block;margin-bottom:4px;"><?php esc_html_e('Middle', 'bw'); ?></span>
+                                <input type="color" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[background_gradient_mid]" value="<?php echo esc_attr(!empty($settings['background_gradient_mid']) ? (string) $settings['background_gradient_mid'] : '#a6b2e8'); ?>">
+                            </label>
+                            <label>
+                                <span style="display:block;margin-bottom:4px;"><?php esc_html_e('End', 'bw'); ?></span>
+                                <input type="color" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[background_gradient_end]" value="<?php echo esc_attr(!empty($settings['background_gradient_end']) ? (string) $settings['background_gradient_end'] : '#73d6dc'); ?>">
+                            </label>
                         </div>
                     </td>
                 </tr>

@@ -7,6 +7,7 @@
     --bw-link-logo-width: 180px;
     --bw-link-logo-rotate-duration: 18s;
     --bw-link-bg-image: none;
+    --bw-link-bg-gradient: none;
 }
 
 * {
@@ -22,7 +23,7 @@ body {
 body {
     min-height: 100vh;
     background: var(--bw-link-bg);
-    background-image: var(--bw-link-bg-image);
+    background-image: var(--bw-link-bg-gradient), var(--bw-link-bg-image);
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;

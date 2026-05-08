@@ -28,6 +28,13 @@ $logo_url = $logo_id > 0 ? wp_get_attachment_image_url($logo_id, 'full') : '';
 $page_id = isset($settings['page_id']) ? (int) $settings['page_id'] : 0;
 $background_color = isset($settings['background_color']) ? sanitize_hex_color((string) $settings['background_color']) : '#0f0f0f';
 $background_color = $background_color ? $background_color : '#0f0f0f';
+$background_gradient_enabled = !isset($settings['background_gradient_enabled']) || !empty($settings['background_gradient_enabled']);
+$background_gradient_start = isset($settings['background_gradient_start']) ? sanitize_hex_color((string) $settings['background_gradient_start']) : '';
+$background_gradient_start = $background_gradient_start ? $background_gradient_start : '#de8cf8';
+$background_gradient_mid = isset($settings['background_gradient_mid']) ? sanitize_hex_color((string) $settings['background_gradient_mid']) : '';
+$background_gradient_mid = $background_gradient_mid ? $background_gradient_mid : '#a6b2e8';
+$background_gradient_end = isset($settings['background_gradient_end']) ? sanitize_hex_color((string) $settings['background_gradient_end']) : '';
+$background_gradient_end = $background_gradient_end ? $background_gradient_end : '#73d6dc';
 $background_image_id = isset($settings['background_image_id']) ? (int) $settings['background_image_id'] : 0;
 $background_image_url = $background_image_id > 0 ? wp_get_attachment_image_url($background_image_id, 'full') : '';
 $logo_width = isset($settings['logo_width']) ? absint($settings['logo_width']) : 180;
@@ -173,6 +180,9 @@ $body_style = sprintf(
 
 if (!empty($background_image_url)) {
     $body_style .= '--bw-link-bg-image:url(' . esc_url_raw($background_image_url) . ');';
+}
+if ($background_gradient_enabled) {
+    $body_style .= '--bw-link-bg-gradient:linear-gradient(90deg,' . esc_attr($background_gradient_start) . ' 0%,' . esc_attr($background_gradient_mid) . ' 50%,' . esc_attr($background_gradient_end) . ' 100%);';
 }
 ?>
 <!doctype html>
