@@ -60,6 +60,10 @@ function bw_link_page_get_settings()
         'newsletter_button_label' => 'Subscribe',
         'newsletter_helper_text' => '',
         'newsletter_image_id' => 0,
+        'newsletter_focus_border_color' => '#FF00B9',
+        'newsletter_button_bg_color' => '#ffffff',
+        'newsletter_button_text_color' => '#333333',
+        'newsletter_privacy_text_color' => '#000000',
         'background_color' => '#0f0f0f',
         'background_image_id' => 0,
         'background_gradient_enabled' => 1,
@@ -156,6 +160,10 @@ function bw_link_page_sanitize_settings($raw)
         'newsletter_button_label' => isset($raw['newsletter_button_label']) ? sanitize_text_field($raw['newsletter_button_label']) : 'Subscribe',
         'newsletter_helper_text' => isset($raw['newsletter_helper_text']) ? sanitize_textarea_field($raw['newsletter_helper_text']) : '',
         'newsletter_image_id' => isset($raw['newsletter_image_id']) ? absint($raw['newsletter_image_id']) : 0,
+        'newsletter_focus_border_color' => isset($raw['newsletter_focus_border_color']) ? (string) sanitize_hex_color((string) $raw['newsletter_focus_border_color']) : '#FF00B9',
+        'newsletter_button_bg_color' => isset($raw['newsletter_button_bg_color']) ? (string) sanitize_hex_color((string) $raw['newsletter_button_bg_color']) : '#ffffff',
+        'newsletter_button_text_color' => isset($raw['newsletter_button_text_color']) ? (string) sanitize_hex_color((string) $raw['newsletter_button_text_color']) : '#333333',
+        'newsletter_privacy_text_color' => isset($raw['newsletter_privacy_text_color']) ? (string) sanitize_hex_color((string) $raw['newsletter_privacy_text_color']) : '#000000',
         'background_color' => $background_color,
         'background_image_id' => isset($raw['background_image_id']) ? absint($raw['background_image_id']) : 0,
         'background_gradient_enabled' => !isset($raw['background_gradient_enabled']) || !empty($raw['background_gradient_enabled']) ? 1 : 0,
@@ -913,6 +921,30 @@ function bw_link_page_render_settings_tab($settings, $pages, $logo_url)
                         <th scope="row"><label for="bw-link-page-newsletter-button-label"><?php esc_html_e('Submit button label', 'bw'); ?></label></th>
                         <td>
                             <input type="text" class="regular-text" id="bw-link-page-newsletter-button-label" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[newsletter_button_label]" value="<?php echo esc_attr(isset($settings['newsletter_button_label']) ? (string) $settings['newsletter_button_label'] : 'Subscribe'); ?>">
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="bw-link-page-newsletter-focus-border-color"><?php esc_html_e('Selection border color', 'bw'); ?></label></th>
+                        <td>
+                            <input type="color" id="bw-link-page-newsletter-focus-border-color" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[newsletter_focus_border_color]" value="<?php echo esc_attr(!empty($settings['newsletter_focus_border_color']) ? (string) $settings['newsletter_focus_border_color'] : '#FF00B9'); ?>">
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="bw-link-page-newsletter-button-bg-color"><?php esc_html_e('Subscribe button background', 'bw'); ?></label></th>
+                        <td>
+                            <input type="color" id="bw-link-page-newsletter-button-bg-color" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[newsletter_button_bg_color]" value="<?php echo esc_attr(!empty($settings['newsletter_button_bg_color']) ? (string) $settings['newsletter_button_bg_color'] : '#ffffff'); ?>">
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="bw-link-page-newsletter-button-text-color"><?php esc_html_e('Subscribe button text color', 'bw'); ?></label></th>
+                        <td>
+                            <input type="color" id="bw-link-page-newsletter-button-text-color" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[newsletter_button_text_color]" value="<?php echo esc_attr(!empty($settings['newsletter_button_text_color']) ? (string) $settings['newsletter_button_text_color'] : '#333333'); ?>">
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="bw-link-page-newsletter-privacy-text-color"><?php esc_html_e('Privacy text color', 'bw'); ?></label></th>
+                        <td>
+                            <input type="color" id="bw-link-page-newsletter-privacy-text-color" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[newsletter_privacy_text_color]" value="<?php echo esc_attr(!empty($settings['newsletter_privacy_text_color']) ? (string) $settings['newsletter_privacy_text_color'] : '#000000'); ?>">
                         </td>
                     </tr>
                     <tr>

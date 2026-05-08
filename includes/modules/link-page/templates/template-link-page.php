@@ -23,6 +23,14 @@ $newsletter_button_label = isset($settings['newsletter_button_label']) && '' !==
 $newsletter_helper_text = isset($settings['newsletter_helper_text']) ? (string) $settings['newsletter_helper_text'] : '';
 $newsletter_image_id = isset($settings['newsletter_image_id']) ? (int) $settings['newsletter_image_id'] : 0;
 $newsletter_image_url = $newsletter_image_id > 0 ? wp_get_attachment_image_url($newsletter_image_id, 'large') : '';
+$newsletter_focus_border_color = isset($settings['newsletter_focus_border_color']) ? sanitize_hex_color((string) $settings['newsletter_focus_border_color']) : '';
+$newsletter_focus_border_color = $newsletter_focus_border_color ? $newsletter_focus_border_color : '#FF00B9';
+$newsletter_button_bg_color = isset($settings['newsletter_button_bg_color']) ? sanitize_hex_color((string) $settings['newsletter_button_bg_color']) : '';
+$newsletter_button_bg_color = $newsletter_button_bg_color ? $newsletter_button_bg_color : '#ffffff';
+$newsletter_button_text_color = isset($settings['newsletter_button_text_color']) ? sanitize_hex_color((string) $settings['newsletter_button_text_color']) : '';
+$newsletter_button_text_color = $newsletter_button_text_color ? $newsletter_button_text_color : '#333333';
+$newsletter_privacy_text_color = isset($settings['newsletter_privacy_text_color']) ? sanitize_hex_color((string) $settings['newsletter_privacy_text_color']) : '';
+$newsletter_privacy_text_color = $newsletter_privacy_text_color ? $newsletter_privacy_text_color : '#000000';
 $logo_id = isset($settings['logo_id']) ? (int) $settings['logo_id'] : 0;
 $logo_url = $logo_id > 0 ? wp_get_attachment_image_url($logo_id, 'full') : '';
 $page_id = isset($settings['page_id']) ? (int) $settings['page_id'] : 0;
@@ -196,10 +204,14 @@ if ($background_gradient_enabled && $background_gradient_animated) {
 }
 
 $body_style = sprintf(
-    '--bw-link-bg:%1$s;--bw-link-logo-width:%2$spx;--bw-link-logo-rotate-duration:%3$ss;',
+    '--bw-link-bg:%1$s;--bw-link-logo-width:%2$spx;--bw-link-logo-rotate-duration:%3$ss;--bw-newsletter-focus-border:%4$s;--bw-newsletter-button-bg:%5$s;--bw-newsletter-button-text:%6$s;--bw-newsletter-privacy-text:%7$s;',
     $background_color,
     (string) $logo_width,
-    rtrim(rtrim(number_format($logo_rotate_speed, 1, '.', ''), '0'), '.')
+    rtrim(rtrim(number_format($logo_rotate_speed, 1, '.', ''), '0'), '.'),
+    $newsletter_focus_border_color,
+    $newsletter_button_bg_color,
+    $newsletter_button_text_color,
+    $newsletter_privacy_text_color
 );
 
 /**

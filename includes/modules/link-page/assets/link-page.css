@@ -4,6 +4,10 @@
     --bw-link-muted: #bcbcbc;
     --bw-link-border: #2e2e2e;
     --bw-link-accent: #80fd03;
+    --bw-newsletter-focus-border: #ff00b9;
+    --bw-newsletter-button-bg: #ffffff;
+    --bw-newsletter-button-text: #333333;
+    --bw-newsletter-privacy-text: #000000;
     --bw-link-logo-width: 180px;
     --bw-link-logo-rotate-duration: 18s;
     --bw-link-bg-image: none;
@@ -158,8 +162,8 @@ body {
 
 .newsletter-submit {
     border: 2px solid #111111;
-    background: #ffffff;
-    color: #333333;
+    background: var(--bw-newsletter-button-bg);
+    color: var(--bw-newsletter-button-text);
     border-radius: 11px;
     font-size: 16px;
     font-weight: 600;
@@ -183,8 +187,8 @@ body {
 }
 
 .newsletter-form.is-ready .newsletter-submit {
-    background: #ffffff;
-    color: #222222;
+    background: #ff00b9;
+    color: #ffffff;
     opacity: 1;
     cursor: pointer;
 }
@@ -204,15 +208,15 @@ body {
 
 .newsletter-email-combo.has-input,
 .newsletter-email-combo:focus-within {
-    border-color: #8f64ff;
-    box-shadow: 0 0 0 1px rgba(143, 100, 255, 0.28);
+    border-color: var(--bw-newsletter-focus-border);
+    box-shadow: 0 0 0 1px var(--bw-newsletter-focus-border);
 }
 
 .newsletter-consent {
     display: flex;
     align-items: center;
     gap: 8px;
-    color: var(--bw-link-muted);
+    color: var(--bw-newsletter-privacy-text);
     font-size: 9px;
     line-height: 1.3;
     text-align: left;
@@ -225,9 +229,9 @@ body {
     width: 16px;
     height: 16px;
     min-width: 16px;
-    border: 1px solid rgba(255, 255, 255, 0.55);
+    border: 2px solid #111111;
     border-radius: 4px;
-    background: rgba(0, 0, 0, 0.28);
+    background: #ffffff;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -238,8 +242,8 @@ body {
 }
 
 .newsletter-consent input[type="checkbox"]:checked {
-    background: var(--bw-link-accent);
-    border-color: var(--bw-link-accent);
+    background: #ff00b9;
+    border-color: #ff00b9;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath d='M2 5.2 4.1 7.2 8 3.2' fill='none' stroke='%230b0b0b' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: center;
@@ -247,7 +251,7 @@ body {
 }
 
 .newsletter-consent input[type="checkbox"]:focus-visible {
-    outline: 2px solid var(--bw-link-accent);
+    outline: 2px solid #ff00b9;
     outline-offset: 2px;
 }
 
@@ -261,7 +265,7 @@ body {
 }
 
 .newsletter-consent a {
-    color: var(--bw-link-text);
+    color: var(--bw-newsletter-privacy-text);
 }
 
 .newsletter-message {
