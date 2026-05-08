@@ -11,6 +11,10 @@ if (!defined('BW_LINK_PAGE_DB_VERSION')) {
     define('BW_LINK_PAGE_DB_VERSION', '1');
 }
 
+if (!defined('BW_LINK_PAGE_LOCAL_URL_WARNING_TRANSIENT_PREFIX')) {
+    define('BW_LINK_PAGE_LOCAL_URL_WARNING_TRANSIENT_PREFIX', 'bw_link_page_local_url_warning_');
+}
+
 /**
  * Return normalized Link Page settings.
  *
@@ -161,6 +165,8 @@ function bw_link_page_sanitize_settings($raw)
         }
     }
 
+    bw_link_page_maybe_set_local_url_warning($settings);
+
     return $settings;
 }
 
@@ -173,6 +179,113 @@ function bw_link_page_register_settings()
     ]);
 }
 add_action('admin_init', 'bw_link_page_register_settings');
+
+/**
+ * Detect obvious local/test URLs.
+ *
+ * @param string $url URL candidate.
+ * @return bool
+ */
+function bw_link_page_is_local_test_url($url)
+{
+    $url = trim((string) $url);
+    if ('' === $url) {
+        return false;
+    }
+
+    $host = wp_parse_url($url, PHP_URL_HOST);
+    if (!is_string($host) || '' === $host) {
+        return false;
+    }
+
+    $host = strtolower($host);
+
+    if ('localhost' === $host || '127.0.0.1' === $host) {
+        return true;
+    }
+
+    return (bool) preg_match('/(^|\\.)local$/', $host);
+}
+
+/**
+ * Store a transient warning when local/test URLs are saved.
+ *
+ * @param array<string,mixed> $settings Sanitized settings payload.
+ * @return void
+ */
+function bw_link_page_maybe_set_local_url_warning($settings)
+{
+    if (!function_exists('get_current_user_id')) {
+        return;
+    }
+
+    $user_id = get_current_user_id();
+    if ($user_id <= 0) {
+        return;
+    }
+
+    $warning_count = 0;
+    $links = isset($settings['links']) && is_array($settings['links']) ? $settings['links'] : [];
+    foreach ($links as $link) {
+        $url = isset($link['url']) ? (string) $link['url'] : '';
+        if (bw_link_page_is_local_test_url($url)) {
+            $warning_count++;
+        }
+    }
+
+    $transient_key = BW_LINK_PAGE_LOCAL_URL_WARNING_TRANSIENT_PREFIX . (string) $user_id;
+
+    if ($warning_count > 0) {
+        set_transient($transient_key, $warning_count, 10 * MINUTE_IN_SECONDS);
+        return;
+    }
+
+    delete_transient($transient_key);
+}
+
+/**
+ * Render local/test URL warning on Link Page admin screen only.
+ *
+ * @return void
+ */
+function bw_link_page_render_local_url_warning_notice()
+{
+    if (!current_user_can('manage_options')) {
+        return;
+    }
+
+    $current_page = isset($_GET['page']) ? sanitize_key(wp_unslash($_GET['page'])) : '';
+    if ('bw-link-page-settings' !== $current_page) {
+        return;
+    }
+
+    $user_id = get_current_user_id();
+    if ($user_id <= 0) {
+        return;
+    }
+
+    $transient_key = BW_LINK_PAGE_LOCAL_URL_WARNING_TRANSIENT_PREFIX . (string) $user_id;
+    $warning_count = (int) get_transient($transient_key);
+    if ($warning_count <= 0) {
+        return;
+    }
+
+    delete_transient($transient_key);
+    ?>
+    <div class="notice notice-warning is-dismissible">
+        <p>
+            <?php
+            printf(
+                /* translators: %d: number of local/test URLs found in Link Page links */
+                esc_html__('%d Link Page link URL(s) point to local/test hosts (.local, localhost, 127.0.0.1). Replace them before deploying online.', 'bw'),
+                $warning_count
+            );
+            ?>
+        </p>
+    </div>
+    <?php
+}
+add_action('admin_notices', 'bw_link_page_render_local_url_warning_notice');
 
 function bw_link_page_get_clicks_table_name()
 {

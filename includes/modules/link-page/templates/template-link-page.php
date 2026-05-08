@@ -87,6 +87,16 @@ $newsletter_consent_required = true;
 $newsletter_consent_prefix = __('I agree to the', 'bw');
 $newsletter_privacy_link_label = __('Privacy Policy', 'bw');
 $newsletter_privacy_url = function_exists('get_privacy_policy_url') ? get_privacy_policy_url() : '';
+$newsletter_messages = [
+    'emptyEmail' => __('Please enter your email address.', 'bw'),
+    'invalidEmail' => __('Please enter a valid email address.', 'bw'),
+    'missingConsent' => __('Please confirm the privacy consent to subscribe.', 'bw'),
+    'loading' => __('Submitting...', 'bw'),
+    'success' => __('Thanks for subscribing!', 'bw'),
+    'alreadySubscribed' => __('You are already subscribed.', 'bw'),
+    'genericFailure' => __('Something went wrong. Please try again.', 'bw'),
+    'networkFailure' => __('Something went wrong. Please try again.', 'bw'),
+];
 
 if (class_exists('BW_Mail_Marketing_Settings')) {
     $subscription_settings = BW_Mail_Marketing_Settings::get_subscription_settings();
@@ -100,6 +110,25 @@ if (class_exists('BW_Mail_Marketing_Settings')) {
     if (!empty($subscription_settings['privacy_url'])) {
         $newsletter_privacy_url = (string) $subscription_settings['privacy_url'];
     }
+
+    $configured_messages_map = [
+        'empty_email_message' => 'emptyEmail',
+        'invalid_email_message' => 'invalidEmail',
+        'consent_required_message' => 'missingConsent',
+        'loading_message' => 'loading',
+        'success_message' => 'success',
+        'already_subscribed_message' => 'alreadySubscribed',
+        'error_message' => 'genericFailure',
+    ];
+
+    foreach ($configured_messages_map as $settings_key => $target_key) {
+        if (!empty($subscription_settings[$settings_key])) {
+            $newsletter_messages[$target_key] = sanitize_textarea_field((string) $subscription_settings[$settings_key]);
+        }
+    }
+
+    // Keep network fallback aligned with generic provider error if customized.
+    $newsletter_messages['networkFailure'] = $newsletter_messages['genericFailure'];
 }
 
 $frontend_config = [
@@ -116,6 +145,7 @@ $frontend_config = [
         'action' => 'bw_mail_marketing_subscribe',
         'nonce' => wp_create_nonce('bw_mail_marketing_subscription_submit'),
         'consentRequired' => $newsletter_consent_required ? 1 : 0,
+        'messages' => $newsletter_messages,
     ],
 ];
 

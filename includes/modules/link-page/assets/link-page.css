@@ -21,11 +21,15 @@ body {
 
 body {
     min-height: 100vh;
-    background: var(--bw-link-bg);
+    background:
+        radial-gradient(1200px 560px at 50% -16%, rgba(128, 253, 3, 0.2), rgba(128, 253, 3, 0) 58%),
+        linear-gradient(180deg, #151515 0%, #0d0d0d 100%);
+    background-color: var(--bw-link-bg);
     background-image: var(--bw-link-bg-image);
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
+    background-blend-mode: normal, normal, overlay;
     color: var(--bw-link-text);
     font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
     -webkit-font-smoothing: antialiased;
@@ -43,13 +47,19 @@ body {
 
 .container {
     width: 100%;
-    max-width: 420px;
+    max-width: 460px;
     margin: 0 auto;
     text-align: center;
+    padding: 24px 18px;
+    border-radius: 24px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: linear-gradient(180deg, rgba(20, 20, 20, 0.82) 0%, rgba(12, 12, 12, 0.86) 100%);
+    box-shadow: 0 20px 44px rgba(0, 0, 0, 0.34);
+    backdrop-filter: blur(4px);
 }
 
 .logo {
-    margin-bottom: 24px;
+    margin-bottom: 18px;
 }
 
 .logo img {
@@ -66,22 +76,26 @@ body {
 }
 
 .title {
-    margin: 0 0 14px;
-    font-size: 24px;
+    margin: 0 0 10px;
+    font-size: clamp(24px, 5vw, 30px);
     line-height: 1.12;
     letter-spacing: 0.01em;
     font-weight: 700;
 }
 
 .description {
-    margin: 0 0 28px;
+    margin: 0 0 24px;
     color: var(--bw-link-muted);
-    font-size: 16px;
+    font-size: 15px;
     line-height: 1.55;
 }
 
 .newsletter-block {
-    margin: 0 0 22px;
+    margin: 0 0 20px;
+    padding: 14px;
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.04);
 }
 
 .newsletter-form {
@@ -90,15 +104,16 @@ body {
 }
 
 .newsletter-email-combo {
-    display: flex;
-    align-items: center;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
     width: 100%;
-    border-radius: 999px;
+    border-radius: 14px;
     border: 1px solid rgba(255, 255, 255, 0.2);
     background: rgba(255, 255, 255, 0.08);
     overflow: hidden;
     padding: 4px;
-    gap: 8px;
+    gap: 6px;
     transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
 }
 
@@ -122,8 +137,8 @@ body {
 .newsletter-email-combo .newsletter-field-email input {
     border: 0;
     background: transparent;
-    border-radius: 999px;
-    padding: 13px 18px;
+    border-radius: 10px;
+    padding: 13px 14px;
 }
 
 .newsletter-form input,
@@ -148,13 +163,13 @@ body {
     border: 1px solid #111;
     background: #111;
     color: #bdbdbd;
-    border-radius: 999px;
+    border-radius: 10px;
     font-size: 15px;
     font-weight: 600;
     line-height: 1;
     padding: 12px 22px;
-    min-width: 124px;
-    flex: 0 0 auto;
+    min-height: 44px;
+    width: 100%;
     cursor: default;
     opacity: 0.82;
     transition: background-color 0.18s ease, color 0.18s ease, border-color 0.18s ease, opacity 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
@@ -298,13 +313,13 @@ body {
 
 .links {
     display: grid;
-    gap: 12px;
+    gap: 10px;
 }
 
 .link-item {
     display: block;
     width: 100%;
-    padding: 15px 20px;
+    padding: 15px 18px;
     border: 1px solid var(--bw-link-button-border, var(--bw-link-border));
     background: var(--bw-link-button-bg, transparent);
     border-radius: 50px;
@@ -313,7 +328,7 @@ body {
     font-size: 16px;
     font-weight: 600;
     line-height: 1.2;
-    transition: opacity 0.16s ease, border-color 0.16s ease, background-color 0.16s ease;
+    transition: opacity 0.16s ease, border-color 0.16s ease, background-color 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease;
 }
 
 @keyframes bw-link-logo-spin {
@@ -337,7 +352,10 @@ body {
 }
 
 .link-item:hover {
-    opacity: 0.9;
+    opacity: 0.95;
+    transform: translateY(-1px);
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.24);
+    border-color: rgba(255, 255, 255, 0.3);
 }
 
 .link-item:focus-visible {
@@ -393,7 +411,7 @@ body {
     }
 
     .newsletter-submit {
-        min-width: 104px;
+        min-width: 0;
         padding: 11px 16px;
         font-size: 14px;
     }
@@ -407,6 +425,31 @@ body {
         width: 14px;
         height: 14px;
         min-width: 14px;
+    }
+}
+
+@media (min-width: 640px) {
+    .wrapper {
+        padding: 48px 20px;
+    }
+
+    .newsletter-email-combo {
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        border-radius: 999px;
+        gap: 8px;
+    }
+
+    .newsletter-email-combo .newsletter-field-email input {
+        border-radius: 999px;
+        padding: 13px 18px;
+    }
+
+    .newsletter-submit {
+        border-radius: 999px;
+        min-width: 124px;
+        width: auto;
+        padding: 12px 22px;
     }
 }
 

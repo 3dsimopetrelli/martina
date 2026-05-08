@@ -167,7 +167,17 @@
         var action = typeof config.action === 'string' ? config.action : 'bw_mail_marketing_subscribe';
         var nonce = typeof config.nonce === 'string' ? config.nonce : '';
         var consentRequired = Number(config.consentRequired || 0) === 1;
+        var messages = (config.messages && typeof config.messages === 'object') ? config.messages : {};
         var form = document.querySelector('.newsletter-form');
+
+        function getMessage(key, fallback) {
+            var value = messages[key];
+            if (typeof value === 'string' && value.trim() !== '') {
+                return value;
+            }
+
+            return fallback;
+        }
 
         if (!enabled || !form || !endpoint || !nonce) {
             return;
@@ -215,19 +225,19 @@
 
             if (!emailInput || email === '') {
                 setEmailInvalidState(form, true);
-                setNewsletterMessage(form, 'is-error', 'Please enter your email address.');
+                setNewsletterMessage(form, 'is-error', getMessage('emptyEmail', 'Please enter your email address.'));
                 return;
             }
 
             if (!isValidEmail(email)) {
                 setEmailInvalidState(form, true);
-                setNewsletterMessage(form, 'is-error', 'Please enter a valid email address.');
+                setNewsletterMessage(form, 'is-error', getMessage('invalidEmail', 'Please enter a valid email address.'));
                 return;
             }
 
             if (consentRequired && privacyInput && !privacyInput.checked) {
                 setConsentErrorState(form, true);
-                setNewsletterMessage(form, 'is-error', 'Please confirm the privacy consent to subscribe.');
+                setNewsletterMessage(form, 'is-error', getMessage('missingConsent', 'Please confirm the privacy consent to subscribe.'));
                 return;
             }
 
@@ -249,7 +259,7 @@
             }
 
             setNewsletterBusy(form, true);
-            setNewsletterMessage(form, 'is-loading', 'Submitting...');
+            setNewsletterMessage(form, 'is-loading', getMessage('loading', 'Submitting...'));
 
             fetch(endpoint, {
                 method: 'POST',
@@ -266,16 +276,28 @@
                 })
                 .then(function (data) {
                     if (data && data.success) {
-                        setNewsletterMessage(form, 'is-success', (data.data && data.data.message) ? data.data.message : 'Thanks for subscribing!');
-                        form.reset();
-                        updateNewsletterUIState(form, consentRequired);
+                        var responseCode = (data.data && typeof data.data.code === 'string') ? data.data.code : '';
+                        var successMessage = (data.data && data.data.message) ? data.data.message : getMessage('success', 'Thanks for subscribing!');
+
+                        setNewsletterMessage(form, 'is-success', successMessage);
+
+                        if ('success' === responseCode) {
+                            form.reset();
+                            updateNewsletterUIState(form, consentRequired);
+                        } else if ('already_subscribed' === responseCode) {
+                            if (emailInput) {
+                                emailInput.value = email;
+                            }
+                            updateNewsletterUIState(form, consentRequired);
+                        }
+
                         return;
                     }
 
-                    setNewsletterMessage(form, 'is-error', (data && data.data && data.data.message) ? data.data.message : 'Something went wrong. Please try again.');
+                    setNewsletterMessage(form, 'is-error', (data && data.data && data.data.message) ? data.data.message : getMessage('genericFailure', 'Something went wrong. Please try again.'));
                 })
                 .catch(function () {
-                    setNewsletterMessage(form, 'is-error', 'Something went wrong. Please try again.');
+                    setNewsletterMessage(form, 'is-error', getMessage('networkFailure', 'Something went wrong. Please try again.'));
                 })
                 .finally(function () {
                     setNewsletterBusy(form, false);
