@@ -90,16 +90,43 @@
 
     function setNewsletterMessage(form, type, text) {
         var message = form.querySelector('.newsletter-message');
+        var messageIcon;
+        var messageText;
         if (!message) {
             return;
         }
 
-        message.classList.remove('is-success', 'is-error', 'is-loading');
+        message.classList.remove('is-success', 'is-error', 'is-loading', 'is-info', 'is-visible');
         if (type) {
             message.classList.add(type);
         }
+        if (text) {
+            message.classList.add('is-visible');
+        }
 
-        message.textContent = text || '';
+        message.innerHTML = '';
+        if (!text) {
+            return;
+        }
+
+        messageIcon = document.createElement('span');
+        messageIcon.className = 'newsletter-message-icon';
+        messageIcon.setAttribute('aria-hidden', 'true');
+
+        if (type === 'is-loading') {
+            messageIcon.classList.add('is-spinner');
+        } else if (type === 'is-error') {
+            messageIcon.textContent = '!';
+        } else {
+            messageIcon.textContent = '✓';
+        }
+
+        messageText = document.createElement('span');
+        messageText.className = 'newsletter-message-text';
+        messageText.textContent = text;
+
+        message.appendChild(messageIcon);
+        message.appendChild(messageText);
     }
 
     function setConsentErrorState(form, hasError) {
@@ -164,6 +191,84 @@
             submit.disabled = !!busy;
             submit.setAttribute('aria-disabled', busy ? 'true' : 'false');
         }
+    }
+
+    function buildMailCheckIcon() {
+        var wrapper = document.createElement('span');
+        wrapper.className = 'bw-newsletter-modal-icon';
+        wrapper.setAttribute('aria-hidden', 'true');
+        wrapper.innerHTML = '' +
+            '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+            '<path d="M22 13V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12c0 1.1.9 2 2 2h8"></path>' +
+            '<path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path>' +
+            '<path d="m16 19 2 2 4-4"></path>' +
+            '</svg>';
+        return wrapper;
+    }
+
+    function getModalElements() {
+        return {
+            root: document.getElementById('bw-newsletter-modal'),
+            title: document.getElementById('bw-newsletter-modal-title'),
+            body: document.getElementById('bw-newsletter-modal-body'),
+            iconHost: document.getElementById('bw-newsletter-modal-icon'),
+            closeButton: document.getElementById('bw-newsletter-modal-close')
+        };
+    }
+
+    function openNewsletterModal(title, body) {
+        var modal = getModalElements();
+        if (!modal.root || !modal.title || !modal.body || !modal.closeButton || !modal.iconHost) {
+            return;
+        }
+
+        modal.title.textContent = title;
+        modal.body.textContent = body;
+        modal.iconHost.innerHTML = '';
+        modal.iconHost.appendChild(buildMailCheckIcon());
+        modal.root.hidden = false;
+        document.body.classList.add('bw-newsletter-modal-open');
+        modal.closeButton.focus();
+    }
+
+    function closeNewsletterModal() {
+        var modal = getModalElements();
+        if (!modal.root) {
+            return;
+        }
+        modal.root.hidden = true;
+        document.body.classList.remove('bw-newsletter-modal-open');
+    }
+
+    function initNewsletterModal() {
+        var modal = getModalElements();
+        if (!modal.root || !modal.closeButton) {
+            return;
+        }
+
+        modal.closeButton.addEventListener('click', closeNewsletterModal);
+        modal.root.addEventListener('click', function (event) {
+            if (event.target === modal.root) {
+                closeNewsletterModal();
+            }
+        });
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape' && !modal.root.hidden) {
+                closeNewsletterModal();
+            }
+        });
+    }
+
+    function maybeOpenConfirmedModal() {
+        var params = new URLSearchParams(window.location.search || '');
+        if (params.get('newsletter_confirmed') !== '1') {
+            return;
+        }
+
+        openNewsletterModal(
+            'Subscription confirmed',
+            'Your newsletter subscription has been confirmed.'
+        );
     }
 
     function initNewsletterForm() {
@@ -266,7 +371,7 @@
             }
 
             setNewsletterBusy(form, true);
-            setNewsletterMessage(form, 'is-loading', getMessage('loading', 'Submitting...'));
+            setNewsletterMessage(form, 'is-loading', getMessage('loading', 'Submitting your request...'));
 
             fetch(endpoint, {
                 method: 'POST',
@@ -284,24 +389,30 @@
                 .then(function (data) {
                     if (data && data.success) {
                         var responseCode = (data.data && typeof data.data.code === 'string') ? data.data.code : '';
-                        var successMessage = (data.data && data.data.message) ? data.data.message : getMessage('success', 'Thanks for subscribing!');
-
-                        setNewsletterMessage(form, 'is-success', successMessage);
+                        var successMessage = 'Thanks for subscribing. Please check your inbox and confirm your subscription.';
 
                         if ('success' === responseCode) {
+                            setNewsletterMessage(form, 'is-success', successMessage);
+                            openNewsletterModal(
+                                'Check your inbox',
+                                'We\'ve sent you a confirmation email. Please open it and click the confirmation button to complete your subscription.'
+                            );
                             form.reset();
                             updateNewsletterUIState(form, consentRequired);
                         } else if ('already_subscribed' === responseCode) {
+                            setNewsletterMessage(form, 'is-info', 'You are already subscribed to this newsletter.');
                             if (emailInput) {
                                 emailInput.value = email;
                             }
                             updateNewsletterUIState(form, consentRequired);
+                        } else {
+                            setNewsletterMessage(form, 'is-success', successMessage);
                         }
 
                         return;
                     }
 
-                    setNewsletterMessage(form, 'is-error', (data && data.data && data.data.message) ? data.data.message : getMessage('genericFailure', 'Something went wrong. Please try again.'));
+                    setNewsletterMessage(form, 'is-error', getMessage('genericFailure', 'Something went wrong. Please try again.'));
                 })
                 .catch(function () {
                     setNewsletterMessage(form, 'is-error', getMessage('networkFailure', 'Something went wrong. Please try again.'));
@@ -316,10 +427,14 @@
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function () {
             initAnalyticsTracking();
+            initNewsletterModal();
+            maybeOpenConfirmedModal();
             initNewsletterForm();
         });
     } else {
         initAnalyticsTracking();
+        initNewsletterModal();
+        maybeOpenConfirmedModal();
         initNewsletterForm();
     }
 }());

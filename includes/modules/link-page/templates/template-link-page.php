@@ -133,10 +133,10 @@ $newsletter_privacy_url = 'https://martinasarritzu.com/?page_id=3';
 $newsletter_messages = [
     'emptyEmail' => __('Please enter your email address.', 'bw'),
     'invalidEmail' => __('Please enter a valid email address.', 'bw'),
-    'missingConsent' => __('Please confirm the privacy consent to subscribe.', 'bw'),
-    'loading' => __('Submitting...', 'bw'),
-    'success' => __('Thanks for subscribing!', 'bw'),
-    'alreadySubscribed' => __('You are already subscribed.', 'bw'),
+    'missingConsent' => __('Please accept the Privacy Policy to continue.', 'bw'),
+    'loading' => __('Submitting your request...', 'bw'),
+    'success' => __('Thanks for subscribing. Please check your inbox and confirm your subscription.', 'bw'),
+    'alreadySubscribed' => __('You are already subscribed to this newsletter.', 'bw'),
     'genericFailure' => __('Something went wrong. Please try again.', 'bw'),
     'networkFailure' => __('Something went wrong. Please try again.', 'bw'),
 ];
@@ -383,6 +383,14 @@ if ($background_gradient_enabled) {
                 <?php endforeach; ?>
             </div>
         <?php endif; ?>
+    </div>
+</div>
+<div class="bw-newsletter-modal" id="bw-newsletter-modal" hidden>
+    <div class="bw-newsletter-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="bw-newsletter-modal-title" aria-describedby="bw-newsletter-modal-body">
+        <div class="bw-newsletter-modal-icon" id="bw-newsletter-modal-icon" aria-hidden="true"></div>
+        <h2 class="bw-newsletter-modal-title" id="bw-newsletter-modal-title"></h2>
+        <p class="bw-newsletter-modal-body" id="bw-newsletter-modal-body"></p>
+        <button type="button" class="bw-newsletter-modal-close" id="bw-newsletter-modal-close">Got it</button>
     </div>
 </div>
 <?php if (($should_load_tracking_js || $should_load_newsletter_js) && file_exists($js_path)) : ?>
