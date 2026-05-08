@@ -22,6 +22,10 @@
         var newsletterImageRemoveButton = document.getElementById('bw-link-page-newsletter-image-remove');
         var newsletterImageInput = document.getElementById('bw-link-page-newsletter-image-id');
         var newsletterImagePreview = document.getElementById('bw-link-page-newsletter-image-preview');
+        var seoImageUploadButton = document.getElementById('bw-link-page-seo-image-upload');
+        var seoImageRemoveButton = document.getElementById('bw-link-page-seo-image-remove');
+        var seoImageInput = document.getElementById('bw-link-page-seo-image-id');
+        var seoImagePreview = document.getElementById('bw-link-page-seo-image-preview');
 
         function nextIndex(tableBody) {
             if (!tableBody) {
@@ -346,6 +350,38 @@
             newsletterImageRemoveButton.addEventListener('click', function () {
                 newsletterImageInput.value = '';
                 newsletterImagePreview.innerHTML = '';
+            });
+        }
+
+        if (seoImageUploadButton && seoImageInput && seoImagePreview) {
+            seoImageUploadButton.addEventListener('click', function () {
+                if (typeof wp === 'undefined' || !wp.media) {
+                    return;
+                }
+
+                var frame = wp.media({
+                    title: 'Select social preview image',
+                    button: { text: 'Use image' },
+                    multiple: false,
+                    library: { type: 'image' }
+                });
+
+                frame.on('select', function () {
+                    var attachment = frame.state().get('selection').first().toJSON();
+                    seoImageInput.value = String(attachment.id || '');
+                    seoImagePreview.innerHTML = attachment.url
+                        ? '<img src="' + attachment.url + '" alt="" style="max-width:200px;height:auto;display:block;">'
+                        : '';
+                });
+
+                frame.open();
+            });
+        }
+
+        if (seoImageRemoveButton && seoImageInput && seoImagePreview) {
+            seoImageRemoveButton.addEventListener('click', function () {
+                seoImageInput.value = '';
+                seoImagePreview.innerHTML = '';
             });
         }
 

@@ -261,6 +261,7 @@ if ($background_gradient_enabled) {
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?php echo esc_html(get_the_title()); ?></title>
     <link rel="stylesheet" href="<?php echo esc_url($css_url); ?>?ver=<?php echo esc_attr((string) (file_exists($css_path) ? filemtime($css_path) : '1.0.0')); ?>">
+    <?php wp_head(); ?>
 </head>
 <body class="<?php echo esc_attr(implode(' ', $body_classes)); ?>" style="<?php echo esc_attr($body_style); ?>">
 <div class="wrapper">
@@ -390,5 +391,6 @@ if ($background_gradient_enabled) {
     <script>window.bwLinkPageConfig = <?php echo wp_json_encode($frontend_config); ?>;</script>
     <script src="<?php echo esc_url($js_url); ?>?ver=<?php echo esc_attr((string) filemtime($js_path)); ?>" defer></script>
 <?php endif; ?>
+<?php wp_footer(); ?>
 </body>
 </html>

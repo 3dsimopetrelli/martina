@@ -53,6 +53,9 @@ function bw_link_page_get_settings()
         'title' => '',
         'title_color' => '',
         'description' => '',
+        'seo_title' => '',
+        'seo_description' => '',
+        'seo_image_id' => 0,
         'newsletter_enabled' => 0,
         'newsletter_show_name' => 0,
         'newsletter_email_placeholder' => 'Your email',
@@ -153,6 +156,9 @@ function bw_link_page_sanitize_settings($raw)
         'title' => isset($raw['title']) ? sanitize_text_field($raw['title']) : '',
         'title_color' => isset($raw['title_color']) ? (string) sanitize_hex_color((string) $raw['title_color']) : '',
         'description' => isset($raw['description']) ? sanitize_textarea_field($raw['description']) : '',
+        'seo_title' => isset($raw['seo_title']) ? sanitize_text_field($raw['seo_title']) : '',
+        'seo_description' => isset($raw['seo_description']) ? sanitize_textarea_field($raw['seo_description']) : '',
+        'seo_image_id' => isset($raw['seo_image_id']) ? absint($raw['seo_image_id']) : 0,
         'newsletter_enabled' => !empty($raw['newsletter_enabled']) ? 1 : 0,
         'newsletter_show_name' => !empty($raw['newsletter_show_name']) ? 1 : 0,
         'newsletter_email_placeholder' => isset($raw['newsletter_email_placeholder']) ? sanitize_text_field($raw['newsletter_email_placeholder']) : 'Your email',
@@ -710,6 +716,8 @@ function bw_link_page_render_settings_tab($settings, $pages, $logo_url)
     $background_image_url = $background_image_id > 0 ? wp_get_attachment_image_url($background_image_id, 'large') : '';
     $newsletter_image_id = isset($settings['newsletter_image_id']) ? (int) $settings['newsletter_image_id'] : 0;
     $newsletter_image_url = $newsletter_image_id > 0 ? wp_get_attachment_image_url($newsletter_image_id, 'large') : '';
+    $seo_image_id = isset($settings['seo_image_id']) ? (int) $settings['seo_image_id'] : 0;
+    $seo_image_url = $seo_image_id > 0 ? wp_get_attachment_image_url($seo_image_id, 'large') : '';
     $social_links = isset($settings['social_links']) && is_array($settings['social_links']) ? $settings['social_links'] : [];
     ?>
     <form method="post" action="options.php" class="bw-site-settings-form" style="max-width: 1180px;">
@@ -971,6 +979,39 @@ function bw_link_page_render_settings_tab($settings, $pages, $logo_url)
                     </tbody>
                 </table>
             </div>
+        </section>
+
+        <section class="bw-admin-card">
+            <h2 class="bw-admin-card-title"><?php esc_html_e('SEO & Social', 'bw'); ?></h2>
+            <p class="bw-admin-card-helper"><?php esc_html_e('Optional metadata overrides for Link Page social preview.', 'bw'); ?></p>
+            <table class="form-table bw-admin-form-grid" role="presentation">
+                <tbody>
+                <tr>
+                    <th scope="row"><label for="bw-link-page-seo-title"><?php esc_html_e('SEO title', 'bw'); ?></label></th>
+                    <td><input type="text" class="regular-text" id="bw-link-page-seo-title" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[seo_title]" value="<?php echo esc_attr(isset($settings['seo_title']) ? (string) $settings['seo_title'] : ''); ?>"></td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="bw-link-page-seo-description"><?php esc_html_e('SEO description', 'bw'); ?></label></th>
+                    <td><textarea class="large-text" rows="3" id="bw-link-page-seo-description" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[seo_description]"><?php echo esc_textarea(isset($settings['seo_description']) ? (string) $settings['seo_description'] : ''); ?></textarea></td>
+                </tr>
+                <tr>
+                    <th scope="row"><?php esc_html_e('Social preview image', 'bw'); ?></th>
+                    <td>
+                        <input type="hidden" id="bw-link-page-seo-image-id" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[seo_image_id]" value="<?php echo esc_attr((string) $seo_image_id); ?>">
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <button type="button" class="button" id="bw-link-page-seo-image-upload"><?php esc_html_e('Select image', 'bw'); ?></button>
+                            <button type="button" class="button" id="bw-link-page-seo-image-remove"><?php esc_html_e('Remove', 'bw'); ?></button>
+                        </div>
+                        <div id="bw-link-page-seo-image-preview" style="margin-top:12px;">
+                            <?php if (!empty($seo_image_url)) : ?>
+                                <img src="<?php echo esc_url($seo_image_url); ?>" alt="" style="max-width:200px;height:auto;display:block;">
+                            <?php endif; ?>
+                        </div>
+                        <p class="description"><?php esc_html_e('Recommended: 1200x630', 'bw'); ?></p>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
         </section>
 
         <section class="bw-admin-card">
@@ -1315,3 +1356,46 @@ function bw_link_page_template_include($template)
     return $template;
 }
 add_filter('template_include', 'bw_link_page_template_include', 999);
+
+/**
+ * Keep Link Page lightweight while still allowing wp_head()/wp_footer() for SEO plugins.
+ *
+ * @return void
+ */
+function bw_link_page_dequeue_heavy_assets()
+{
+    if (is_admin()) {
+        return;
+    }
+
+    $settings = bw_link_page_get_settings();
+    $page_id = !empty($settings['page_id']) ? (int) $settings['page_id'] : 0;
+    if ($page_id <= 0 || !is_page($page_id)) {
+        return;
+    }
+
+    $style_handles = [
+        'elementor-frontend',
+        'elementor-pro',
+        'global-styles',
+        'wc-blocks-style',
+        'wp-block-library',
+        'wp-block-library-theme',
+    ];
+
+    $script_handles = [
+        'elementor-frontend',
+        'elementor-pro-frontend',
+        'wc-cart-fragments',
+        'wc-add-to-cart',
+    ];
+
+    foreach ($style_handles as $handle) {
+        wp_dequeue_style($handle);
+    }
+
+    foreach ($script_handles as $handle) {
+        wp_dequeue_script($handle);
+    }
+}
+add_action('wp_enqueue_scripts', 'bw_link_page_dequeue_heavy_assets', 999);
