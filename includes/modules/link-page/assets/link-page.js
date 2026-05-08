@@ -140,7 +140,14 @@
 
     function updateNewsletterUIState(form, consentRequired) {
         var state = getNewsletterReadiness(form, consentRequired);
+        var emailInput = form.querySelector('input[name="email"]');
+        var combo = form.querySelector('.newsletter-email-combo');
+        var hasInput = !!emailInput && normalizeEmail(emailInput.value || '') !== '';
+
         form.classList.toggle('is-ready', state.ready);
+        if (combo) {
+            combo.classList.toggle('has-input', hasInput);
+        }
 
         if (state.emailValid) {
             setEmailInvalidState(form, false);
