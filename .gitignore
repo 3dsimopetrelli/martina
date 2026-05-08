@@ -45,3 +45,7 @@ elementor-cache/
 
 # macOS thumbnails
 Thumbs.db
+
+composer.lock
+
+
