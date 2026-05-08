@@ -6,6 +6,8 @@ if (!defined('ABSPATH')) {
 $settings = function_exists('bw_link_page_get_settings') ? bw_link_page_get_settings() : [];
 $links = isset($settings['links']) && is_array($settings['links']) ? $settings['links'] : [];
 $title = isset($settings['title']) ? (string) $settings['title'] : '';
+$title_color = isset($settings['title_color']) ? sanitize_hex_color((string) $settings['title_color']) : '';
+$title_color = $title_color ? $title_color : '#000000';
 $description = isset($settings['description']) ? (string) $settings['description'] : '';
 $newsletter_enabled = !empty($settings['newsletter_enabled']);
 $newsletter_show_name = !empty($settings['newsletter_show_name']);
@@ -183,7 +185,7 @@ if (!empty($background_image_url)) {
         <?php endif; ?>
 
         <?php if ('' !== $title) : ?>
-            <h1 class="title"><?php echo esc_html($title); ?></h1>
+            <h1 class="title" style="color: <?php echo esc_attr($title_color); ?>;"><?php echo esc_html($title); ?></h1>
         <?php endif; ?>
 
         <?php if ('' !== $description) : ?>

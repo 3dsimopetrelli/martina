@@ -26,6 +26,7 @@ function bw_link_page_get_settings()
         'page_id' => 0,
         'logo_id' => 0,
         'title' => '',
+        'title_color' => '',
         'description' => '',
         'newsletter_enabled' => 0,
         'newsletter_show_name' => 0,
@@ -100,6 +101,7 @@ function bw_link_page_sanitize_settings($raw)
         'page_id' => isset($raw['page_id']) ? absint($raw['page_id']) : 0,
         'logo_id' => isset($raw['logo_id']) ? absint($raw['logo_id']) : 0,
         'title' => isset($raw['title']) ? sanitize_text_field($raw['title']) : '',
+        'title_color' => isset($raw['title_color']) ? (string) sanitize_hex_color((string) $raw['title_color']) : '',
         'description' => isset($raw['description']) ? sanitize_textarea_field($raw['description']) : '',
         'newsletter_enabled' => !empty($raw['newsletter_enabled']) ? 1 : 0,
         'newsletter_show_name' => !empty($raw['newsletter_show_name']) ? 1 : 0,
@@ -737,6 +739,17 @@ function bw_link_page_render_settings_tab($settings, $pages, $logo_url)
                     <th scope="row"><label for="bw-link-page-title"><?php esc_html_e('Title (optional)', 'bw'); ?></label></th>
                     <td>
                         <input type="text" class="regular-text" id="bw-link-page-title" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[title]" value="<?php echo esc_attr($settings['title']); ?>">
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="bw-link-page-title-color"><?php esc_html_e('Title color', 'bw'); ?></label></th>
+                    <td>
+                        <input
+                            type="color"
+                            id="bw-link-page-title-color"
+                            name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[title_color]"
+                            value="<?php echo esc_attr(!empty($settings['title_color']) ? (string) $settings['title_color'] : '#000000'); ?>"
+                        >
                     </td>
                 </tr>
                 <tr>
