@@ -16,3 +16,32 @@ pnpm-debug.log*
 .DS_Store
 .vscode/
 
+# Environment
+.env
+.env.local
+.env.production
+
+# Logs
+*.log
+debug.log
+
+# Temporary
+tmp/
+temp/
+
+# Build
+dist/
+build/
+
+# Archives
+*.zip
+*.tar.gz
+
+# IDE
+.idea/
+
+# Cache
+elementor-cache/
+
+# macOS thumbnails
+Thumbs.db
