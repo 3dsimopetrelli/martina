@@ -983,7 +983,29 @@ class BW_Checkout_Subscribe_Admin {
 
                     <section class="bw-admin-card">
                         <h2 class="bw-admin-card-title"><?php esc_html_e( 'Advanced', 'bw' ); ?></h2>
-                        <p class="bw-admin-card-helper"><?php esc_html_e( 'Control logging and customer attribute synchronization behavior.', 'bw' ); ?></p>
+                        <p class="bw-admin-card-helper"><?php esc_html_e( 'Control customer resubscribe policy and attribute synchronization behavior.', 'bw' ); ?></p>
+                        <table class="form-table bw-admin-table" role="presentation">
+                            <tr>
+                                <th scope="row"><label for="bw_mail_marketing_general_resubscribe_policy"><?php esc_html_e( 'Resubscribe policy', 'bw' ); ?></label></th>
+                                <td>
+                                    <select id="bw_mail_marketing_general_resubscribe_policy" name="bw_mail_marketing_general_resubscribe_policy">
+                                        <option value="no_auto_resubscribe" <?php selected( $general_settings['resubscribe_policy'], 'no_auto_resubscribe' ); ?>><?php esc_html_e( 'Do not auto-resubscribe unsubscribed/blocklisted', 'bw' ); ?></option>
+                                    </select>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><?php esc_html_e( 'Attribute sync', 'bw' ); ?></th>
+                                <td>
+                                    <label style="margin-right: 16px;"><input type="checkbox" name="bw_mail_marketing_general_sync_first_name" value="1" <?php checked( $general_settings['sync_first_name'], 1 ); ?> /> <?php esc_html_e( 'First name', 'bw' ); ?></label>
+                                    <label><input type="checkbox" name="bw_mail_marketing_general_sync_last_name" value="1" <?php checked( $general_settings['sync_last_name'], 1 ); ?> /> <?php esc_html_e( 'Last name', 'bw' ); ?></label>
+                                </td>
+                            </tr>
+                        </table>
+                    </section>
+
+                    <section class="bw-admin-card">
+                        <h2 class="bw-admin-card-title"><?php esc_html_e( 'Debug & Diagnostics', 'bw' ); ?></h2>
+                        <p class="bw-admin-card-helper"><?php esc_html_e( 'Dedicated tools for troubleshooting Brevo connection and newsletter double opt-in flow.', 'bw' ); ?></p>
                         <table class="form-table bw-admin-table" role="presentation">
                             <tr>
                                 <th scope="row"><?php esc_html_e( 'Debug logging', 'bw' ); ?></th>
@@ -1009,21 +1031,6 @@ class BW_Checkout_Subscribe_Admin {
                                 <td>
                                     <p><a class="button" href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-ajax.php?action=bw_newsletter_debug_log_download' ), 'bw_checkout_subscribe_test', 'nonce' ) ); ?>"><?php esc_html_e( 'Download newsletter debug log', 'bw' ); ?></a></p>
                                     <textarea class="large-text code" rows="10" readonly="readonly"><?php echo esc_textarea( implode( "\n", $newsletter_log_preview ) ); ?></textarea>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="bw_mail_marketing_general_resubscribe_policy"><?php esc_html_e( 'Resubscribe policy', 'bw' ); ?></label></th>
-                                <td>
-                                    <select id="bw_mail_marketing_general_resubscribe_policy" name="bw_mail_marketing_general_resubscribe_policy">
-                                        <option value="no_auto_resubscribe" <?php selected( $general_settings['resubscribe_policy'], 'no_auto_resubscribe' ); ?>><?php esc_html_e( 'Do not auto-resubscribe unsubscribed/blocklisted', 'bw' ); ?></option>
-                                    </select>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><?php esc_html_e( 'Attribute sync', 'bw' ); ?></th>
-                                <td>
-                                    <label style="margin-right: 16px;"><input type="checkbox" name="bw_mail_marketing_general_sync_first_name" value="1" <?php checked( $general_settings['sync_first_name'], 1 ); ?> /> <?php esc_html_e( 'First name', 'bw' ); ?></label>
-                                    <label><input type="checkbox" name="bw_mail_marketing_general_sync_last_name" value="1" <?php checked( $general_settings['sync_last_name'], 1 ); ?> /> <?php esc_html_e( 'Last name', 'bw' ); ?></label>
                                 </td>
                             </tr>
                         </table>
