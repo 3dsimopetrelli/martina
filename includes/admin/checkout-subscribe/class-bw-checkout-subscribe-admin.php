@@ -761,6 +761,20 @@ class BW_Checkout_Subscribe_Admin {
                     $remote_checks['template_status'],
                     isset( $template_result['data'] ) ? $this->sanitize_newsletter_diag_response( $template_result['data'] ) : []
                 );
+            } else {
+                $template_data = isset( $template_result['data'] ) && is_array( $template_result['data'] ) ? $template_result['data'] : [];
+                $is_active = isset( $template_data['isActive'] ) ? (bool) $template_data['isActive'] : false;
+                $is_doi_template = isset( $template_data['doiTemplate'] ) ? (bool) $template_data['doiTemplate'] : false;
+
+                if ( ! $is_active || ! $is_doi_template ) {
+                    $errors[] = $this->build_newsletter_diag_error(
+                        'invalid_doi_template_id',
+                        __( 'DOI template is not active or not DOI-compatible.', 'bw' ),
+                        __( 'This must be a Brevo SMTP/transactional template ID, not a marketing email template ID.', 'bw' ),
+                        $remote_checks['template_status'],
+                        $this->sanitize_newsletter_diag_response( $template_data )
+                    );
+                }
             }
 
             if ( empty( $errors ) ) {
@@ -964,7 +978,10 @@ class BW_Checkout_Subscribe_Admin {
                             </tr>
                             <tr>
                                 <th scope="row"><label for="bw_mail_marketing_general_double_optin_template_id"><?php esc_html_e( 'DOI template ID', 'bw' ); ?></label></th>
-                                <td><input type="number" id="bw_mail_marketing_general_double_optin_template_id" name="bw_mail_marketing_general_double_optin_template_id" value="<?php echo esc_attr( $general_settings['double_optin_template_id'] ); ?>" class="small-text" min="0" /></td>
+                                <td>
+                                    <input type="number" id="bw_mail_marketing_general_double_optin_template_id" name="bw_mail_marketing_general_double_optin_template_id" value="<?php echo esc_attr( $general_settings['double_optin_template_id'] ); ?>" class="small-text" min="0" />
+                                    <p class="description"><?php esc_html_e( 'This must be a Brevo SMTP/transactional template ID, not a marketing email template ID.', 'bw' ); ?></p>
+                                </td>
                             </tr>
                             <tr>
                                 <th scope="row"><label for="bw_mail_marketing_general_double_optin_redirect_url"><?php esc_html_e( 'DOI redirect URL', 'bw' ); ?></label></th>
@@ -3492,6 +3509,12 @@ class BW_Checkout_Subscribe_Admin {
             if ( isset( $response[ $key ] ) ) {
                 $safe[ $key ] = sanitize_textarea_field( (string) $response[ $key ] );
             }
+        }
+        if ( isset( $response['isActive'] ) ) {
+            $safe['isActive'] = ! empty( $response['isActive'] ) ? 1 : 0;
+        }
+        if ( isset( $response['doiTemplate'] ) ) {
+            $safe['doiTemplate'] = ! empty( $response['doiTemplate'] ) ? 1 : 0;
         }
         return $safe;
     }

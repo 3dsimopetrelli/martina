@@ -91,7 +91,18 @@ jQuery(function ($) {
                     doiResult.addClass('notice-success is-success').text(message);
                 } else {
                     const message = response && response.data && response.data.message ? response.data.message : (cfg.errorText || 'DOI test failed.');
-                    const errors = response && response.data && Array.isArray(response.data.errors) ? response.data.errors.join(' | ') : '';
+                    const errors = response && response.data && Array.isArray(response.data.errors)
+                        ? response.data.errors.map(function (item) {
+                            if (item && typeof item === 'object') {
+                                var code = item.code ? String(item.code) : '';
+                                var details = item.details ? String(item.details) : '';
+                                var msg = item.message ? String(item.message) : '';
+                                var suffix = details ? details : msg;
+                                return code ? (code + (suffix ? (': ' + suffix) : '')) : (suffix || '');
+                            }
+                            return String(item || '');
+                        }).filter(Boolean).join(' | ')
+                        : '';
                     doiResult.addClass('notice-error is-error').text(errors ? message + ' ' + errors : message);
                 }
             })

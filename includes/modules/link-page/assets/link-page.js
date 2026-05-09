@@ -309,7 +309,21 @@
 
             var code = (typeof data.code === 'string' && data.code.trim() !== '') ? data.code.trim() : 'unknown_newsletter_error';
             var details = (typeof data.details === 'string' && data.details.trim() !== '') ? data.details.trim() : '';
-            return details ? ('Newsletter error: ' + code + ' — ' + details) : ('Newsletter error: ' + code);
+            var extra = '';
+            if (data.brevo_response && typeof data.brevo_response === 'object') {
+                var brevoMessage = typeof data.brevo_response.message === 'string' ? data.brevo_response.message.trim() : '';
+                var brevoCode = typeof data.brevo_response.code === 'string' ? data.brevo_response.code.trim() : '';
+                if (brevoMessage) {
+                    extra = brevoMessage;
+                } else if (brevoCode) {
+                    extra = brevoCode;
+                }
+            }
+            var merged = details;
+            if (extra) {
+                merged = merged ? (merged + ' | ' + extra) : extra;
+            }
+            return merged ? ('Newsletter error: ' + code + ' — ' + merged) : ('Newsletter error: ' + code);
         }
 
         if (!enabled || !form || !endpoint || !nonce) {

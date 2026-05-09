@@ -276,7 +276,7 @@ if ( ! class_exists( 'BW_MailMarketing_Subscription_Channel' ) ) {
                             (int) $template_id,
                             $redirect_url,
                             '/contacts/doubleOptinConfirmation',
-                            '' !== $sender_email ? $sender_email : 'empty'
+                            '' !== $sender_email ? $this->mask_email( $sender_email ) : 'empty'
                         ),
                         $email,
                         $source_key,
@@ -587,7 +587,9 @@ if ( ! class_exists( 'BW_MailMarketing_Subscription_Channel' ) ) {
             }
 
             $code = 'brevo_api_error';
-            if ( 0 === $status ) {
+            if ( 429 === $status || false !== strpos( $response_text, 'rate limit' ) || false !== strpos( $response_text, 'too many requests' ) ) {
+                $code = 'rate_limited';
+            } elseif ( 0 === $status ) {
                 $code = 'brevo_network_error';
             } elseif ( false !== strpos( $response_text, 'sender' ) && ( false !== strpos( $response_text, 'invalid' ) || false !== strpos( $response_text, 'verify' ) || false !== strpos( $response_text, 'authenticated' ) ) ) {
                 $code = 'brevo_sender_rejected';
@@ -601,7 +603,9 @@ if ( ! class_exists( 'BW_MailMarketing_Subscription_Channel' ) ) {
 
             return [
                 'code' => $code,
-                'details' => '' !== $error_message ? $error_message : __( 'Brevo request failed.', 'bw' ),
+                'details' => 'rate_limited' === $code
+                    ? __( 'Brevo rate limit reached. Wait before retrying.', 'bw' )
+                    : ( '' !== $error_message ? $error_message : __( 'Brevo request failed.', 'bw' ) ),
                 'brevo_status' => $status,
                 'brevo_response' => $this->sanitize_brevo_response_payload( $response_data ),
             ];
