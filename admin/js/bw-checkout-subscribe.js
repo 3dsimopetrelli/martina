@@ -1,9 +1,11 @@
 jQuery(function ($) {
     const button = $('#bw-brevo-test-connection');
     const result = $('.bw-brevo-test-result');
+    const doiButton = $('#bw-brevo-test-doi-configuration');
+    const doiResult = $('.bw-brevo-doi-test-result');
     const cfg = window.bwCheckoutSubscribe || {};
 
-    if (!button.length) {
+    if (!button.length && !doiButton.length) {
         return;
     }
 
@@ -57,6 +59,51 @@ jQuery(function ($) {
             })
             .always(function () {
                 button.prop('disabled', false);
+            });
+    });
+
+    doiButton.on('click', function (event) {
+        event.preventDefault();
+
+        const ajaxUrl = cfg.ajaxUrl || window.ajaxurl || '';
+        doiResult.removeClass('notice-success notice-error is-success is-error').text('');
+
+        if (!ajaxUrl) {
+            doiResult.addClass('notice-error is-error').text(cfg.errorText || 'DOI test failed.');
+            return;
+        }
+
+        doiButton.prop('disabled', true);
+        doiResult.text(cfg.testingDoiText || 'Testing DOI configuration...');
+
+        $.ajax({
+            url: ajaxUrl,
+            method: 'POST',
+            dataType: 'json',
+            data: {
+                action: 'bw_brevo_test_doi_configuration',
+                nonce: cfg.nonce
+            }
+        })
+            .done(function (response) {
+                if (response.success) {
+                    const message = response.data && response.data.message ? response.data.message : 'DOI configuration looks valid.';
+                    doiResult.addClass('notice-success is-success').text(message);
+                } else {
+                    const message = response && response.data && response.data.message ? response.data.message : (cfg.errorText || 'DOI test failed.');
+                    const errors = response && response.data && Array.isArray(response.data.errors) ? response.data.errors.join(' | ') : '';
+                    doiResult.addClass('notice-error is-error').text(errors ? message + ' ' + errors : message);
+                }
+            })
+            .fail(function (xhr) {
+                const fallback = cfg.errorText || 'DOI test failed.';
+                const serverMessage = xhr && xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message
+                    ? xhr.responseJSON.data.message
+                    : '';
+                doiResult.addClass('notice-error is-error').text(serverMessage || fallback);
+            })
+            .always(function () {
+                doiButton.prop('disabled', false);
             });
     });
 });

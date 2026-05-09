@@ -1,6 +1,7 @@
 (function () {
     var config = window.bwMailMarketingSubscription || {};
     var messages = config.messages || {};
+    var debugLogging = !!config.debugLogging;
     var REQUEST_TIMEOUT = 15000;
 
     function getMessage(key, fallback) {
@@ -263,7 +264,13 @@
 
         request
             .then(function (response) {
+                if (debugLogging && typeof console !== 'undefined' && console.info) {
+                    console.info('[Blackwork Newsletter] Response status:', response.status);
+                }
                 return parseResponse(response).then(function (payload) {
+                    if (debugLogging && typeof console !== 'undefined' && console.info) {
+                        console.info('[Blackwork Newsletter] Response JSON:', payload);
+                    }
                     if (!payload || typeof payload.success !== 'boolean' || !payload.data || typeof payload.data.code !== 'string') {
                         return {
                             success: false,
@@ -291,6 +298,9 @@
                 }
 
                 setMessage(form, 'error', getResponseMessage(payload, getMessage('genericFailure', 'Something went wrong. Please try again.')));
+                if (debugLogging && typeof console !== 'undefined' && console.warn && payload && payload.data && payload.data.code) {
+                    console.warn('[Blackwork Newsletter] Error code:', payload.data.code);
+                }
 
                 if (payload.data && payload.data.code === 'missing_consent') {
                     setFieldInvalid(form.querySelector('input[name="privacy"]'), true);
@@ -302,6 +312,9 @@
                 }
             })
             .catch(function () {
+                if (debugLogging && typeof console !== 'undefined' && console.error) {
+                    console.error('[Blackwork Newsletter] Request failed');
+                }
                 setMessage(form, 'error', getMessage('networkFailure', 'Something went wrong. Please try again.'));
             })
             .finally(function () {

@@ -279,6 +279,7 @@
         var action = typeof config.action === 'string' ? config.action : 'bw_mail_marketing_subscribe';
         var nonce = typeof config.nonce === 'string' ? config.nonce : '';
         var consentRequired = Number(config.consentRequired || 0) === 1;
+        var debugLogging = Number(config.debugLogging || 0) === 1;
         var messages = (config.messages && typeof config.messages === 'object') ? config.messages : {};
         var form = document.querySelector('.newsletter-form');
 
@@ -382,11 +383,17 @@
                 credentials: 'same-origin'
             })
                 .then(function (response) {
+                    if (debugLogging && typeof console !== 'undefined' && console.info) {
+                        console.info('[Blackwork Link Page Newsletter] Response status:', response.status);
+                    }
                     return response.json().catch(function () {
                         return null;
                     });
                 })
                 .then(function (data) {
+                    if (debugLogging && typeof console !== 'undefined' && console.info) {
+                        console.info('[Blackwork Link Page Newsletter] Response JSON:', data);
+                    }
                     if (data && data.success) {
                         var responseCode = (data.data && typeof data.data.code === 'string') ? data.data.code : '';
                         var successMessage = 'Thanks for subscribing. Please check your inbox and confirm your subscription.';
@@ -413,8 +420,14 @@
                     }
 
                     setNewsletterMessage(form, 'is-error', getMessage('genericFailure', 'Something went wrong. Please try again.'));
+                    if (debugLogging && typeof console !== 'undefined' && console.warn && data && data.data && data.data.code) {
+                        console.warn('[Blackwork Link Page Newsletter] Error code:', data.data.code);
+                    }
                 })
                 .catch(function () {
+                    if (debugLogging && typeof console !== 'undefined' && console.error) {
+                        console.error('[Blackwork Link Page Newsletter] Request failed');
+                    }
                     setNewsletterMessage(form, 'is-error', getMessage('networkFailure', 'Something went wrong. Please try again.'));
                 })
                 .finally(function () {

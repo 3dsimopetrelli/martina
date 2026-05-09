@@ -100,76 +100,77 @@ if ( ! class_exists( 'BW_MailMarketing_Subscription_Channel' ) ) {
          * @return void
          */
         public function handle_submit() {
-            $nonce = isset( $_POST['nonce'] ) ? sanitize_text_field( wp_unslash( $_POST['nonce'] ) ) : '';
-            if ( ! wp_verify_nonce( $nonce, 'bw_mail_marketing_subscription_submit' ) ) {
-                $this->send_response( false, 'generic_failure', __( 'Security check failed. Please refresh and try again.', 'bw' ), 403 );
-                return;
-            }
+            try {
+                $nonce = isset( $_POST['nonce'] ) ? sanitize_text_field( wp_unslash( $_POST['nonce'] ) ) : '';
+                if ( ! wp_verify_nonce( $nonce, 'bw_mail_marketing_subscription_submit' ) ) {
+                    $this->send_response( false, 'generic_failure', __( 'Security check failed. Please refresh and try again.', 'bw' ), 403 );
+                    return;
+                }
 
-            if ( ! class_exists( 'BW_Mail_Marketing_Settings' ) || ! class_exists( 'BW_Brevo_Client' ) ) {
-                $this->send_response( false, 'generic_failure', __( 'Mail Marketing configuration is unavailable.', 'bw' ), 500 );
-                return;
-            }
+                if ( ! class_exists( 'BW_Mail_Marketing_Settings' ) || ! class_exists( 'BW_Brevo_Client' ) ) {
+                    $this->send_response( false, 'generic_failure', __( 'Mail Marketing configuration is unavailable.', 'bw' ), 200 );
+                    return;
+                }
 
-            $general_settings = BW_Mail_Marketing_Settings::get_general_settings();
-            $channel_settings = BW_Mail_Marketing_Settings::get_subscription_settings();
-            $source_key = ! empty( $channel_settings['source_key'] ) ? sanitize_key( (string) $channel_settings['source_key'] ) : 'elementor_widget';
-            $consent_required = ! isset( $channel_settings['consent_required'] ) || ! empty( $channel_settings['consent_required'] );
+                $general_settings = BW_Mail_Marketing_Settings::get_general_settings();
+                $channel_settings = BW_Mail_Marketing_Settings::get_subscription_settings();
+                $source_key = ! empty( $channel_settings['source_key'] ) ? sanitize_key( (string) $channel_settings['source_key'] ) : 'elementor_widget';
+                $consent_required = ! isset( $channel_settings['consent_required'] ) || ! empty( $channel_settings['consent_required'] );
 
-            if ( empty( $channel_settings['enabled'] ) ) {
-                $this->send_response( false, 'generic_failure', __( 'Newsletter widget is currently disabled.', 'bw' ), 400 );
-                return;
-            }
+                if ( empty( $channel_settings['enabled'] ) ) {
+                    $this->send_response( false, 'generic_failure', __( 'Newsletter widget is currently disabled.', 'bw' ), 400 );
+                    return;
+                }
 
-            $email_state = $this->normalize_email_input( isset( $_POST['email'] ) ? wp_unslash( $_POST['email'] ) : '' );
-            $email = $email_state['email'];
-            $full_name = isset( $_POST['name'] ) ? sanitize_text_field( wp_unslash( $_POST['name'] ) ) : '';
-            $consent = ! empty( $_POST['privacy'] ) ? 1 : 0;
+                $email_state = $this->normalize_email_input( isset( $_POST['email'] ) ? wp_unslash( $_POST['email'] ) : '' );
+                $email = $email_state['email'];
+                $full_name = isset( $_POST['name'] ) ? sanitize_text_field( wp_unslash( $_POST['name'] ) ) : '';
+                $consent = ! empty( $_POST['privacy'] ) ? 1 : 0;
 
-            if ( $email_state['empty'] ) {
-                $this->send_response( false, 'empty_email', $this->get_message( $channel_settings, 'empty_email_message', __( 'Please enter your email address.', 'bw' ) ), 400 );
-                return;
-            }
+                if ( $email_state['empty'] ) {
+                    $this->send_response( false, 'empty_email', $this->get_message( $channel_settings, 'empty_email_message', __( 'Please enter your email address.', 'bw' ) ), 400 );
+                    return;
+                }
 
-            if ( ! $email_state['valid'] ) {
-                $this->send_response( false, 'invalid_email', $this->get_message( $channel_settings, 'invalid_email_message', __( 'Please enter a valid email address.', 'bw' ) ), 400 );
-                return;
-            }
+                if ( ! $email_state['valid'] ) {
+                    $this->send_response( false, 'invalid_email', $this->get_message( $channel_settings, 'invalid_email_message', __( 'Please enter a valid email address.', 'bw' ) ), 400 );
+                    return;
+                }
 
-            if ( $consent_required && 1 !== $consent ) {
-                $this->send_response( false, 'missing_consent', $this->get_message( $channel_settings, 'consent_required_message', __( 'Please confirm the privacy consent to subscribe.', 'bw' ) ), 400 );
-                return;
-            }
+                if ( $consent_required && 1 !== $consent ) {
+                    $this->send_response( false, 'missing_consent', $this->get_message( $channel_settings, 'consent_required_message', __( 'Please confirm the privacy consent to subscribe.', 'bw' ) ), 400 );
+                    return;
+                }
 
             // Rate limit BEFORE any async operations (API calls) to prevent race condition.
             // Must be set immediately after input validation to prevent two requests from
             // both passing the rate limit check if they arrive within milliseconds.
-            if ( $this->is_rate_limited( $email ) ) {
-                $this->log_event( 'warning', 'Widget subscribe blocked by cooldown.', $email, $source_key, 'rate_limited' );
-                $this->send_response( false, 'rate_limited', $this->get_message( $channel_settings, 'rate_limited_message', __( 'Please wait a moment before trying again.', 'bw' ) ), 429 );
-                return;
-            }
-            $this->touch_rate_limit( $email );
+                if ( $this->is_rate_limited( $email ) ) {
+                    $this->log_event( 'warning', 'Widget subscribe blocked by cooldown.', $email, $source_key, 'rate_limited' );
+                    $this->send_response( false, 'rate_limited', $this->get_message( $channel_settings, 'rate_limited_message', __( 'Please wait a moment before trying again.', 'bw' ) ), 429 );
+                    return;
+                }
+                $this->touch_rate_limit( $email );
 
-            $api_key = isset( $general_settings['api_key'] ) ? sanitize_text_field( (string) $general_settings['api_key'] ) : '';
-            if ( '' === $api_key ) {
-                $this->log_event( 'error', 'Missing Brevo API key for subscription widget.', $email, $source_key, 'missing_settings' );
-                $this->send_response( false, 'generic_failure', $this->get_error_message( $channel_settings ), 500 );
-                return;
-            }
+                $api_key = isset( $general_settings['api_key'] ) ? sanitize_text_field( (string) $general_settings['api_key'] ) : '';
+                if ( '' === $api_key ) {
+                    $this->log_event( 'error', 'Missing Brevo API key for subscription widget.', $email, $source_key, 'missing_settings' );
+                    $this->send_response( false, 'generic_failure', $this->get_error_message( $channel_settings ), 200, [], __( 'Missing API key', 'bw' ) );
+                    return;
+                }
 
-            $list_id = class_exists( 'BW_MailMarketing_Service' )
-                ? BW_MailMarketing_Service::resolve_channel_list_id( $general_settings, $channel_settings )
-                : 0;
-            if ( $list_id <= 0 ) {
-                $this->log_event( 'error', 'Missing Brevo list ID for subscription widget.', $email, $source_key, 'missing_list_id' );
-                $this->send_response( false, 'generic_failure', $this->get_error_message( $channel_settings ), 500 );
-                return;
-            }
+                $list_id = class_exists( 'BW_MailMarketing_Service' )
+                    ? BW_MailMarketing_Service::resolve_channel_list_id( $general_settings, $channel_settings )
+                    : 0;
+                if ( $list_id <= 0 ) {
+                    $this->log_event( 'error', 'Missing Brevo list ID for subscription widget.', $email, $source_key, 'missing_list_id' );
+                    $this->send_response( false, 'generic_failure', $this->get_error_message( $channel_settings ), 200, [], __( 'Invalid main list ID', 'bw' ) );
+                    return;
+                }
 
-            $client = new BW_Brevo_Client( $api_key, BW_Mail_Marketing_Settings::API_BASE_URL );
+                $client = new BW_Brevo_Client( $api_key, BW_Mail_Marketing_Settings::API_BASE_URL );
 
-            $existing_contact = $client->get_contact( $email );
+                $existing_contact = $client->get_contact( $email );
             if ( ! empty( $existing_contact['success'] ) && ! empty( $existing_contact['data'] ) && is_array( $existing_contact['data'] ) ) {
                 $contact_data = $existing_contact['data'];
                 $contact_list_ids = isset( $contact_data['listIds'] ) && is_array( $contact_data['listIds'] ) ? array_map( 'absint', $contact_data['listIds'] ) : [];
@@ -198,27 +199,27 @@ if ( ! class_exists( 'BW_MailMarketing_Subscription_Channel' ) ) {
                 $this->log_event( 'warning', 'Widget contact lookup warning: ' . $lookup_error, $email, $source_key, 'lookup_warning' );
             }
 
-            $consent_at = current_time( 'mysql' );
-            $attributes = class_exists( 'BW_MailMarketing_Service' )
-                ? BW_MailMarketing_Service::build_brevo_attributes_from_subscription( $source_key, $consent_at )
-                : [];
+                $consent_at = current_time( 'mysql' );
+                $attributes = class_exists( 'BW_MailMarketing_Service' )
+                    ? BW_MailMarketing_Service::build_brevo_attributes_from_subscription( $source_key, $consent_at )
+                    : [];
 
-            if ( class_exists( 'BW_MailMarketing_Service' ) ) {
-                $attributes = array_merge(
-                    $attributes,
-                    BW_MailMarketing_Service::build_name_attributes_from_full_name( $full_name, $general_settings )
-                );
-            }
+                if ( class_exists( 'BW_MailMarketing_Service' ) ) {
+                    $attributes = array_merge(
+                        $attributes,
+                        BW_MailMarketing_Service::build_name_attributes_from_full_name( $full_name, $general_settings )
+                    );
+                }
 
-            $mode = class_exists( 'BW_MailMarketing_Service' )
-                ? BW_MailMarketing_Service::resolve_channel_optin_mode( $general_settings, $channel_settings )
-                : 'single_opt_in';
-            $debug_enabled = $this->is_debug_logging_enabled( $general_settings );
+                $mode = class_exists( 'BW_MailMarketing_Service' )
+                    ? BW_MailMarketing_Service::resolve_channel_optin_mode( $general_settings, $channel_settings )
+                    : 'single_opt_in';
+                $debug_enabled = $this->is_debug_logging_enabled( $general_settings );
 
-            $result = [];
-            $attribute_warning = '';
+                $result = [];
+                $attribute_warning = '';
 
-            if ( 'double_opt_in' === $mode ) {
+                if ( 'double_opt_in' === $mode ) {
                 $template_id = isset( $general_settings['double_optin_template_id'] ) ? absint( $general_settings['double_optin_template_id'] ) : 0;
                 $redirect_url = isset( $general_settings['double_optin_redirect_url'] ) ? esc_url_raw( (string) $general_settings['double_optin_redirect_url'] ) : '';
                 $unconfirmed_list_id = isset( $general_settings['unconfirmed_list_id'] ) ? absint( $general_settings['unconfirmed_list_id'] ) : 0;
@@ -227,22 +228,22 @@ if ( ! class_exists( 'BW_MailMarketing_Subscription_Channel' ) ) {
 
                 if ( $template_id <= 0 ) {
                     $this->log_event( 'error', 'Missing DOI template ID for subscription widget.', $email, $source_key, 'missing_doi_template' );
-                    $this->send_response( false, 'generic_failure', $this->get_error_message( $channel_settings ), 500 );
+                    $this->send_response( false, 'generic_failure', $this->get_error_message( $channel_settings ), 200, [], __( 'Invalid DOI template ID', 'bw' ) );
                     return;
                 }
                 if ( ! $this->is_valid_absolute_url( $redirect_url ) ) {
                     $this->log_event( 'error', 'Invalid DOI redirect URL for subscription widget.', $email, $source_key, 'invalid_doi_redirect_url' );
-                    $this->send_response( false, 'generic_failure', $this->get_error_message( $channel_settings ), 500 );
+                    $this->send_response( false, 'generic_failure', $this->get_error_message( $channel_settings ), 200, [], __( 'Invalid DOI redirect URL', 'bw' ) );
                     return;
                 }
                 if ( $unconfirmed_list_id <= 0 ) {
                     $this->log_event( 'error', 'Missing unconfirmed list ID for DOI subscription widget.', $email, $source_key, 'missing_unconfirmed_list_id' );
-                    $this->send_response( false, 'generic_failure', $this->get_error_message( $channel_settings ), 500 );
+                    $this->send_response( false, 'generic_failure', $this->get_error_message( $channel_settings ), 200, [], __( 'Invalid unconfirmed list ID', 'bw' ) );
                     return;
                 }
                 if ( '' !== $sender_email && ! is_email( $sender_email ) ) {
                     $this->log_event( 'error', 'Invalid sender email configured for DOI subscription widget.', $email, $source_key, 'invalid_sender_email' );
-                    $this->send_response( false, 'generic_failure', $this->get_error_message( $channel_settings ), 500 );
+                    $this->send_response( false, 'generic_failure', $this->get_error_message( $channel_settings ), 200, [], __( 'Invalid sender email', 'bw' ) );
                     return;
                 }
 
@@ -255,6 +256,17 @@ if ( ! class_exists( 'BW_MailMarketing_Subscription_Channel' ) ) {
                 }
 
                 if ( $debug_enabled ) {
+                    $request_debug_payload = [
+                        'email'          => $this->mask_email( $email ),
+                        'templateId'     => (int) $template_id,
+                        'redirectionUrl' => $redirect_url,
+                        'includeListIds' => [ (int) $list_id ],
+                        'attributes'     => is_array( $attributes ) ? array_keys( $attributes ) : [],
+                        'sender'         => [
+                            'name'  => $sender_name,
+                            'email' => '' !== $sender_email ? $this->mask_email( $sender_email ) : '',
+                        ],
+                    ];
                     $this->log_event(
                         'info',
                         sprintf(
@@ -270,6 +282,7 @@ if ( ! class_exists( 'BW_MailMarketing_Subscription_Channel' ) ) {
                         $source_key,
                         'debug'
                     );
+                    $this->log_event( 'info', 'BREVO_SUBSCRIBE_DEBUG_REQUEST: payload=' . wp_json_encode( $request_debug_payload ), $email, $source_key, 'debug' );
                 }
 
                 // Pre-assign contact only to the unconfirmed list. The main list is added
@@ -282,7 +295,7 @@ if ( ! class_exists( 'BW_MailMarketing_Subscription_Channel' ) ) {
                 if ( empty( $pending_result['success'] ) ) {
                     $provider_error = ! empty( $pending_result['error'] ) ? sanitize_text_field( (string) $pending_result['error'] ) : '';
                     $this->log_event( 'error', 'Failed to add contact to unconfirmed list before DOI.' . ( '' !== $provider_error ? ' ' . $provider_error : '' ), $email, $source_key, 'error' );
-                    $this->send_response( false, 'generic_failure', $this->get_error_message( $channel_settings ), 500 );
+                    $this->send_response( false, 'generic_failure', $this->get_error_message( $channel_settings ), 200, [], $provider_error );
                     return;
                 }
 
@@ -313,6 +326,11 @@ if ( ! class_exists( 'BW_MailMarketing_Subscription_Channel' ) ) {
                 }
             } else {
                 if ( $debug_enabled ) {
+                    $request_debug_payload = [
+                        'email'      => $this->mask_email( $email ),
+                        'listIds'    => [ (int) $list_id ],
+                        'attributes' => is_array( $attributes ) ? array_keys( $attributes ) : [],
+                    ];
                     $this->log_event(
                         'info',
                         sprintf(
@@ -324,6 +342,7 @@ if ( ! class_exists( 'BW_MailMarketing_Subscription_Channel' ) ) {
                         $source_key,
                         'debug'
                     );
+                    $this->log_event( 'info', 'BREVO_SUBSCRIBE_DEBUG_REQUEST: payload=' . wp_json_encode( $request_debug_payload ), $email, $source_key, 'debug' );
                 }
                 $result = $client->upsert_contact( $email, $attributes, [ $list_id ] );
                 if ( $debug_enabled ) {
@@ -345,25 +364,25 @@ if ( ! class_exists( 'BW_MailMarketing_Subscription_Channel' ) ) {
                 }
             }
 
-            if ( empty( $result['success'] ) ) {
+                if ( empty( $result['success'] ) ) {
                 $provider_error = ! empty( $result['error'] ) ? sanitize_text_field( (string) $result['error'] ) : '';
                 if ( '' !== $attribute_warning ) {
                     $this->log_event( 'warning', 'BW_BREVO_ATTR_INVALID: Widget submit failed with unsupported attributes. ' . $attribute_warning, $email, $source_key, 'warning' );
                 }
                 $this->log_event( 'error', 'Widget subscribe failed.' . ( '' !== $provider_error ? ' ' . $provider_error : '' ), $email, $source_key, 'error' );
-                $this->send_response( false, 'generic_failure', $this->get_error_message( $channel_settings ), 500 );
-                return;
-            }
+                    $this->send_response( false, 'generic_failure', $this->get_error_message( $channel_settings ), 200, [], $provider_error );
+                    return;
+                }
 
-            if ( '' !== $attribute_warning ) {
+                if ( '' !== $attribute_warning ) {
                 $this->log_event( 'warning', 'Brevo accepted the widget subscribe after dropping unsupported attributes: ' . $attribute_warning, $email, $source_key, 'warning' );
             }
 
-            $success_message = ! empty( $channel_settings['success_message'] )
+                $success_message = ! empty( $channel_settings['success_message'] )
                 ? $channel_settings['success_message']
                 : __( 'Thanks for subscribing! Please check your inbox.', 'bw' );
 
-            $this->log_event(
+                $this->log_event(
                 'info',
                 'double_opt_in' === $mode ? 'Widget DOI request sent.' : 'Widget contact subscribed.',
                 $email,
@@ -371,15 +390,23 @@ if ( ! class_exists( 'BW_MailMarketing_Subscription_Channel' ) ) {
                 'double_opt_in' === $mode ? 'pending' : 'subscribed'
             );
 
-            $this->send_response(
+                $this->send_response(
                 true,
                 'success',
                 $success_message,
                 200,
                 [
                     'mode' => $mode,
-                ]
-            );
+                    ]
+                );
+            } catch ( Throwable $exception ) {
+                $general_settings = class_exists( 'BW_Mail_Marketing_Settings' ) ? BW_Mail_Marketing_Settings::get_general_settings() : [];
+                $source_key = 'elementor_widget';
+                $email = isset( $email ) ? (string) $email : '';
+                $this->log_exception_event( $exception, $email, $source_key, $general_settings );
+                $details = ! empty( $general_settings['newsletter_debug_logging'] ) ? $exception->getMessage() : '';
+                $this->send_response( false, 'unexpected_error', __( 'Unexpected newsletter error. Please try again.', 'bw' ), 200, [], $details );
+            }
         }
 
         /**
@@ -419,6 +446,9 @@ if ( ! class_exists( 'BW_MailMarketing_Subscription_Channel' ) ) {
             $channel_settings = class_exists( 'BW_Mail_Marketing_Settings' )
                 ? BW_Mail_Marketing_Settings::get_subscription_settings()
                 : [];
+            $general_settings = class_exists( 'BW_Mail_Marketing_Settings' )
+                ? BW_Mail_Marketing_Settings::get_general_settings()
+                : [];
 
             $privacy_url = ! empty( $channel_settings['privacy_url'] )
                 ? esc_url_raw( (string) $channel_settings['privacy_url'] )
@@ -428,6 +458,7 @@ if ( ! class_exists( 'BW_MailMarketing_Subscription_Channel' ) ) {
                 'ajaxUrl'         => admin_url( 'admin-ajax.php' ),
                 'consentRequired' => ! isset( $channel_settings['consent_required'] ) || ! empty( $channel_settings['consent_required'] ),
                 'privacyUrl'      => $privacy_url,
+                'debugLogging'    => ! empty( $general_settings['newsletter_debug_logging'] ),
                 'messages'        => [
                     'emptyEmail'        => $this->get_message( $channel_settings, 'empty_email_message', __( 'Please enter your email address.', 'bw' ) ),
                     'invalidEmail'      => $this->get_message( $channel_settings, 'invalid_email_message', __( 'Please enter a valid email address.', 'bw' ) ),
@@ -519,11 +550,12 @@ if ( ! class_exists( 'BW_MailMarketing_Subscription_Channel' ) ) {
          *
          * @return void
          */
-        private function send_response( $success, $code, $message, $status = 200, $extra = [] ) {
+        private function send_response( $success, $code, $message, $status = 200, $extra = [], $details = '' ) {
             $payload = array_merge(
                 [
                     'code'    => sanitize_key( (string) $code ),
                     'message' => sanitize_textarea_field( (string) $message ),
+                    'details' => sanitize_textarea_field( (string) $details ),
                 ],
                 $extra
             );
@@ -547,30 +579,42 @@ if ( ! class_exists( 'BW_MailMarketing_Subscription_Channel' ) ) {
          * @return void
          */
         private function log_event( $level, $message, $email, $channel_source, $result ) {
-            if ( ! function_exists( 'wc_get_logger' ) ) {
-                return;
-            }
-
-            $logger = wc_get_logger();
+            $masked_email = $this->mask_email( (string) $email );
             $context = [
-                'source'  => 'bw-brevo',
-                'email'   => sanitize_email( (string) $email ),
+                'source'  => 'blackwork-newsletter',
+                'email'   => $masked_email,
                 'context' => 'subscription_widget',
                 'channel' => sanitize_key( (string) $channel_source ),
                 'result'  => sanitize_key( (string) $result ),
             ];
 
-            if ( 'error' === $level ) {
-                $logger->error( $message, $context );
+            $line = sprintf(
+                '[%s] [%s] %s | email=%s channel=%s result=%s',
+                gmdate( 'Y-m-d H:i:s' ),
+                strtoupper( sanitize_key( (string) $level ) ),
+                sanitize_text_field( (string) $message ),
+                $masked_email,
+                $context['channel'],
+                $context['result']
+            );
+
+            if ( function_exists( 'wc_get_logger' ) ) {
+                $logger = wc_get_logger();
+                if ( 'error' === $level ) {
+                    $logger->error( $message, $context );
+                    return;
+                }
+
+                if ( 'warning' === $level ) {
+                    $logger->warning( $message, $context );
+                    return;
+                }
+
+                $logger->info( $message, $context );
                 return;
             }
 
-            if ( 'warning' === $level ) {
-                $logger->warning( $message, $context );
-                return;
-            }
-
-            $logger->info( $message, $context );
+            $this->write_newsletter_debug_file( $line );
         }
 
         /**
@@ -581,7 +625,7 @@ if ( ! class_exists( 'BW_MailMarketing_Subscription_Channel' ) ) {
          * @return bool
          */
         private function is_debug_logging_enabled( $general_settings ) {
-            return ! empty( $general_settings['debug_logging'] );
+            return ! empty( $general_settings['newsletter_debug_logging'] );
         }
 
         /**
@@ -640,6 +684,61 @@ if ( ! class_exists( 'BW_MailMarketing_Subscription_Channel' ) ) {
                 $source_key,
                 'debug'
             );
+        }
+
+        /**
+         * Mask email for logs.
+         *
+         * @param string $email Email.
+         * @return string
+         */
+        private function mask_email( $email ) {
+            $email = sanitize_email( (string) $email );
+            if ( '' === $email || false === strpos( $email, '@' ) ) {
+                return '***';
+            }
+
+            list( $local, $domain ) = explode( '@', $email, 2 );
+            $local = (string) $local;
+            $domain = (string) $domain;
+
+            $local_masked = strlen( $local ) <= 2 ? substr( $local, 0, 1 ) . '*' : substr( $local, 0, 2 ) . str_repeat( '*', max( 1, strlen( $local ) - 2 ) );
+            return $local_masked . '@' . $domain;
+        }
+
+        /**
+         * Write fallback debug log line when Woo logger is unavailable.
+         *
+         * @param string $line Log line.
+         * @return void
+         */
+        private function write_newsletter_debug_file( $line ) {
+            $upload_dir = wp_upload_dir();
+            $base_dir = isset( $upload_dir['basedir'] ) ? (string) $upload_dir['basedir'] : '';
+            if ( '' === $base_dir ) {
+                return;
+            }
+
+            $file_path = trailingslashit( $base_dir ) . 'blackwork-newsletter-debug.log';
+            error_log( $line . PHP_EOL, 3, $file_path );
+        }
+
+        /**
+         * Log exception with stack trace.
+         *
+         * @param Throwable $exception Exception.
+         * @param string    $email Email.
+         * @param string    $source_key Source.
+         * @param array     $general_settings Settings.
+         * @return void
+         */
+        private function log_exception_event( Throwable $exception, $email, $source_key, $general_settings ) {
+            if ( ! $this->is_debug_logging_enabled( $general_settings ) ) {
+                return;
+            }
+
+            $this->log_event( 'error', 'BREVO_SUBSCRIBE_EXCEPTION: ' . $exception->getMessage(), $email, $source_key, 'exception' );
+            $this->log_event( 'error', 'BREVO_SUBSCRIBE_EXCEPTION_TRACE: ' . $exception->getTraceAsString(), $email, $source_key, 'exception' );
         }
 
         /**

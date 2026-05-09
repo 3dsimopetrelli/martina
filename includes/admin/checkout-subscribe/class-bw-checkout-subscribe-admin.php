@@ -92,6 +92,7 @@ if ( ! class_exists( 'BW_Mail_Marketing_Settings' ) ) {
                 'sender_name'                 => '',
                 'sender_email'                => '',
                 'debug_logging'               => 0,
+                'newsletter_debug_logging'    => 0,
                 'resubscribe_policy'          => 'no_auto_resubscribe',
                 'sync_first_name'             => 1,
                 'sync_last_name'              => 1,
@@ -297,6 +298,8 @@ class BW_Checkout_Subscribe_Admin {
         add_action( 'admin_menu', [ $this, 'register_submenu' ] );
         add_action( 'admin_init', [ $this, 'handle_post' ] );
         add_action( 'wp_ajax_bw_brevo_test_connection', [ $this, 'handle_test_connection' ] );
+        add_action( 'wp_ajax_bw_brevo_test_doi_configuration', [ $this, 'handle_test_doi_configuration' ] );
+        add_action( 'wp_ajax_bw_newsletter_debug_log_download', [ $this, 'handle_newsletter_debug_log_download' ] );
         add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_order_newsletter_assets' ] );
         add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_user_mail_marketing_assets' ] );
         add_action( 'add_meta_boxes', [ $this, 'register_order_newsletter_metabox' ] );
@@ -396,6 +399,7 @@ class BW_Checkout_Subscribe_Admin {
                 : '';
 
             $settings['debug_logging'] = ! empty( $_POST['bw_mail_marketing_general_debug_logging'] ) ? 1 : 0;
+            $settings['newsletter_debug_logging'] = ! empty( $_POST['bw_mail_marketing_general_newsletter_debug_logging'] ) ? 1 : 0;
 
             $settings['resubscribe_policy'] = isset( $_POST['bw_mail_marketing_general_resubscribe_policy'] )
                 ? sanitize_key( wp_unslash( $_POST['bw_mail_marketing_general_resubscribe_policy'] ) )
@@ -655,6 +659,124 @@ class BW_Checkout_Subscribe_Admin {
     }
 
     /**
+     * AJAX handler for DOI configuration dry validation.
+     *
+     * @return void
+     */
+    public function handle_test_doi_configuration() {
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'bw' ) ] );
+        }
+
+        check_ajax_referer( 'bw_checkout_subscribe_test', 'nonce' );
+
+        if ( ! class_exists( 'BW_Brevo_Client' ) ) {
+            wp_send_json_error( [ 'message' => __( 'Brevo client is unavailable.', 'bw' ) ] );
+        }
+
+        $settings = BW_Mail_Marketing_Settings::get_general_settings();
+        $errors = [];
+
+        $api_key = isset( $settings['api_key'] ) ? sanitize_text_field( (string) $settings['api_key'] ) : '';
+        $main_list_id = isset( $settings['list_id'] ) ? absint( $settings['list_id'] ) : 0;
+        $unconfirmed_list_id = isset( $settings['unconfirmed_list_id'] ) ? absint( $settings['unconfirmed_list_id'] ) : 0;
+        $template_id = isset( $settings['double_optin_template_id'] ) ? absint( $settings['double_optin_template_id'] ) : 0;
+        $redirect_url = isset( $settings['double_optin_redirect_url'] ) ? esc_url_raw( (string) $settings['double_optin_redirect_url'] ) : '';
+        $sender_email = isset( $settings['sender_email'] ) ? sanitize_email( (string) $settings['sender_email'] ) : '';
+
+        if ( '' === $api_key ) {
+            $errors[] = __( 'Missing API key.', 'bw' );
+        }
+        if ( $main_list_id <= 0 ) {
+            $errors[] = __( 'Invalid main list ID.', 'bw' );
+        }
+        if ( $unconfirmed_list_id <= 0 ) {
+            $errors[] = __( 'Invalid unconfirmed list ID.', 'bw' );
+        }
+        if ( $template_id <= 0 ) {
+            $errors[] = __( 'Invalid DOI template ID.', 'bw' );
+        }
+        if ( ! $this->is_valid_absolute_url( $redirect_url ) ) {
+            $errors[] = __( 'Invalid DOI redirect URL.', 'bw' );
+        }
+        if ( '' !== $sender_email && ! is_email( $sender_email ) ) {
+            $errors[] = __( 'Invalid sender email.', 'bw' );
+        }
+
+        $remote_checks = [];
+        if ( empty( $errors ) ) {
+            $client = new BW_Brevo_Client( $api_key, BW_Mail_Marketing_Settings::API_BASE_URL );
+            $lists_result = $client->get_lists( 500, 0 );
+            if ( empty( $lists_result['success'] ) ) {
+                $errors[] = __( 'Brevo list check failed.', 'bw' ) . ' ' . ( isset( $lists_result['error'] ) ? sanitize_text_field( (string) $lists_result['error'] ) : '' );
+            } else {
+                $found_main = false;
+                $found_pending = false;
+                if ( ! empty( $lists_result['data']['lists'] ) && is_array( $lists_result['data']['lists'] ) ) {
+                    foreach ( $lists_result['data']['lists'] as $list ) {
+                        $id = isset( $list['id'] ) ? absint( $list['id'] ) : 0;
+                        if ( $id === $main_list_id ) {
+                            $found_main = true;
+                        }
+                        if ( $id === $unconfirmed_list_id ) {
+                            $found_pending = true;
+                        }
+                    }
+                }
+                if ( ! $found_main ) {
+                    $errors[] = __( 'Main list ID not found in Brevo.', 'bw' );
+                }
+                if ( ! $found_pending ) {
+                    $errors[] = __( 'Unconfirmed list ID not found in Brevo.', 'bw' );
+                }
+                $remote_checks['lists_status'] = isset( $lists_result['code'] ) ? (int) $lists_result['code'] : 0;
+            }
+        }
+
+        if ( ! empty( $errors ) ) {
+            wp_send_json_error(
+                [
+                    'message' => __( 'DOI configuration check failed.', 'bw' ),
+                    'errors'  => $errors,
+                    'checks'  => $remote_checks,
+                ]
+            );
+        }
+
+        wp_send_json_success(
+            [
+                'message' => __( 'DOI configuration looks valid.', 'bw' ),
+                'checks'  => $remote_checks,
+            ]
+        );
+    }
+
+    /**
+     * AJAX download for newsletter debug log.
+     *
+     * @return void
+     */
+    public function handle_newsletter_debug_log_download() {
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_die( esc_html__( 'Permission denied.', 'bw' ) );
+        }
+
+        check_ajax_referer( 'bw_checkout_subscribe_test', 'nonce' );
+
+        $lines = $this->get_newsletter_debug_log_lines( 400 );
+        $payload = implode( "\n", $lines );
+        if ( '' === trim( $payload ) ) {
+            $payload = 'No newsletter debug logs found.';
+        }
+
+        nocache_headers();
+        header( 'Content-Type: text/plain; charset=utf-8' );
+        header( 'Content-Disposition: attachment; filename=blackwork-newsletter-debug.log' );
+        echo wp_strip_all_tags( $payload );
+        exit;
+    }
+
+    /**
      * Render the new Mail Marketing admin page.
      */
     public function render_mail_marketing_page() {
@@ -671,6 +793,7 @@ class BW_Checkout_Subscribe_Admin {
         $checkout_settings = BW_Mail_Marketing_Settings::get_checkout_settings();
         $subscription_settings = BW_Mail_Marketing_Settings::get_subscription_settings();
         $lists_data = $this->get_brevo_lists( $general_settings['api_key'] );
+        $newsletter_log_preview = $this->get_newsletter_debug_log_lines( 50 );
 
         $base_url = add_query_arg(
             [
@@ -822,6 +945,26 @@ class BW_Checkout_Subscribe_Admin {
                                 <th scope="row"><?php esc_html_e( 'Debug logging', 'bw' ); ?></th>
                                 <td>
                                     <label><input type="checkbox" name="bw_mail_marketing_general_debug_logging" value="1" <?php checked( $general_settings['debug_logging'], 1 ); ?> /> <?php esc_html_e( 'Enable verbose logs in WooCommerce logger.', 'bw' ); ?></label>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><?php esc_html_e( 'Newsletter debug logging', 'bw' ); ?></th>
+                                <td>
+                                    <label><input type="checkbox" name="bw_mail_marketing_general_newsletter_debug_logging" value="1" <?php checked( ! empty( $general_settings['newsletter_debug_logging'] ) ? 1 : 0, 1 ); ?> /> <?php esc_html_e( 'Enable explicit newsletter submit diagnostics.', 'bw' ); ?></label>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><?php esc_html_e( 'DOI diagnostics', 'bw' ); ?></th>
+                                <td>
+                                    <button type="button" class="button" id="bw-brevo-test-doi-configuration"><?php esc_html_e( 'Test DOI configuration', 'bw' ); ?></button>
+                                    <span class="bw-brevo-doi-test-result" aria-live="polite"></span>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><?php esc_html_e( 'Newsletter debug log', 'bw' ); ?></th>
+                                <td>
+                                    <p><a class="button" href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-ajax.php?action=bw_newsletter_debug_log_download' ), 'bw_checkout_subscribe_test', 'nonce' ) ); ?>"><?php esc_html_e( 'Download newsletter debug log', 'bw' ); ?></a></p>
+                                    <textarea class="large-text code" rows="10" readonly="readonly"><?php echo esc_textarea( implode( "\n", $newsletter_log_preview ) ); ?></textarea>
                                 </td>
                             </tr>
                             <tr>
@@ -3217,5 +3360,48 @@ class BW_Checkout_Subscribe_Admin {
         if ( class_exists( 'BW_Brevo_Lists_Service' ) ) {
             BW_Brevo_Lists_Service::cache_lists_map( $api_key, $lists );
         }
+    }
+
+    /**
+     * Validate absolute URL.
+     *
+     * @param string $url URL.
+     * @return bool
+     */
+    private function is_valid_absolute_url( $url ) {
+        $url = trim( (string) $url );
+        if ( '' === $url || ! wp_http_validate_url( $url ) ) {
+            return false;
+        }
+        $parts = wp_parse_url( $url );
+        return is_array( $parts ) && ! empty( $parts['scheme'] ) && ! empty( $parts['host'] );
+    }
+
+    /**
+     * Read newsletter debug log tail lines.
+     *
+     * @param int $max_lines Max line count.
+     * @return array
+     */
+    private function get_newsletter_debug_log_lines( $max_lines = 50 ) {
+        $max_lines = max( 1, min( 500, absint( $max_lines ) ) );
+        $upload_dir = wp_upload_dir();
+        $base_dir = isset( $upload_dir['basedir'] ) ? (string) $upload_dir['basedir'] : '';
+        if ( '' === $base_dir ) {
+            return [ __( 'Uploads directory unavailable.', 'bw' ) ];
+        }
+
+        $file_path = trailingslashit( $base_dir ) . 'blackwork-newsletter-debug.log';
+        if ( ! file_exists( $file_path ) ) {
+            return [ __( 'No newsletter debug log file found yet.', 'bw' ) ];
+        }
+
+        $lines = @file( $file_path, FILE_IGNORE_NEW_LINES );
+        if ( ! is_array( $lines ) || empty( $lines ) ) {
+            return [ __( 'Newsletter debug log is empty.', 'bw' ) ];
+        }
+
+        $tail = array_slice( $lines, -1 * $max_lines );
+        return array_map( 'sanitize_text_field', $tail );
     }
 }

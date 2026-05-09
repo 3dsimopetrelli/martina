@@ -352,6 +352,7 @@ function bw_site_settings_admin_assets($hook)
                 'nonce' => wp_create_nonce('bw_checkout_subscribe_test'),
                 'errorText' => esc_html__('Connection failed. Please check the API key and network.', 'bw'),
                 'testingText' => esc_html__('Testing connection...', 'bw'),
+                'testingDoiText' => esc_html__('Testing DOI configuration...', 'bw'),
             ]
         );
     }
