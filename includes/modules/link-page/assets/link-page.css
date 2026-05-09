@@ -463,7 +463,7 @@ body {
 
 .bw-newsletter-modal-close {
     min-width: 116px;
-    border-radius: 999px;
+    border-radius: 22px;
     border: 3px solid #111111;
     background: #ff00b9;
     color: #ffffff;
