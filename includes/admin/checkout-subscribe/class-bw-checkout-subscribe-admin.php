@@ -685,51 +685,95 @@ class BW_Checkout_Subscribe_Admin {
         $sender_email = isset( $settings['sender_email'] ) ? sanitize_email( (string) $settings['sender_email'] ) : '';
 
         if ( '' === $api_key ) {
-            $errors[] = __( 'Missing API key.', 'bw' );
+            $errors[] = $this->build_newsletter_diag_error( 'missing_api_key', __( 'Missing API key.', 'bw' ) );
         }
         if ( $main_list_id <= 0 ) {
-            $errors[] = __( 'Invalid main list ID.', 'bw' );
+            $errors[] = $this->build_newsletter_diag_error( 'invalid_main_list_id', __( 'Invalid main list ID.', 'bw' ) );
         }
         if ( $unconfirmed_list_id <= 0 ) {
-            $errors[] = __( 'Invalid unconfirmed list ID.', 'bw' );
+            $errors[] = $this->build_newsletter_diag_error( 'invalid_unconfirmed_list_id', __( 'Invalid unconfirmed list ID.', 'bw' ) );
         }
         if ( $template_id <= 0 ) {
-            $errors[] = __( 'Invalid DOI template ID.', 'bw' );
+            $errors[] = $this->build_newsletter_diag_error( 'invalid_doi_template_id', __( 'Invalid DOI template ID.', 'bw' ) );
         }
         if ( ! $this->is_valid_absolute_url( $redirect_url ) ) {
-            $errors[] = __( 'Invalid DOI redirect URL.', 'bw' );
+            $errors[] = $this->build_newsletter_diag_error( 'invalid_redirect_url', __( 'Invalid DOI redirect URL.', 'bw' ) );
         }
         if ( '' !== $sender_email && ! is_email( $sender_email ) ) {
-            $errors[] = __( 'Invalid sender email.', 'bw' );
+            $errors[] = $this->build_newsletter_diag_error( 'invalid_sender_email', __( 'Invalid sender email.', 'bw' ) );
         }
 
         $remote_checks = [];
         if ( empty( $errors ) ) {
             $client = new BW_Brevo_Client( $api_key, BW_Mail_Marketing_Settings::API_BASE_URL );
-            $lists_result = $client->get_lists( 500, 0 );
-            if ( empty( $lists_result['success'] ) ) {
-                $errors[] = __( 'Brevo list check failed.', 'bw' ) . ' ' . ( isset( $lists_result['error'] ) ? sanitize_text_field( (string) $lists_result['error'] ) : '' );
-            } else {
-                $found_main = false;
-                $found_pending = false;
-                if ( ! empty( $lists_result['data']['lists'] ) && is_array( $lists_result['data']['lists'] ) ) {
-                    foreach ( $lists_result['data']['lists'] as $list ) {
-                        $id = isset( $list['id'] ) ? absint( $list['id'] ) : 0;
-                        if ( $id === $main_list_id ) {
-                            $found_main = true;
-                        }
-                        if ( $id === $unconfirmed_list_id ) {
-                            $found_pending = true;
-                        }
-                    }
-                }
-                if ( ! $found_main ) {
-                    $errors[] = __( 'Main list ID not found in Brevo.', 'bw' );
-                }
-                if ( ! $found_pending ) {
-                    $errors[] = __( 'Unconfirmed list ID not found in Brevo.', 'bw' );
-                }
-                $remote_checks['lists_status'] = isset( $lists_result['code'] ) ? (int) $lists_result['code'] : 0;
+            $this->log_newsletter_diagnostic_event( 'info', 'DOI_TEST endpoint=/contacts/lists/{id} query=list_id=' . $main_list_id );
+            $main_list_result = $client->get_list( $main_list_id );
+            $remote_checks['main_list_status'] = isset( $main_list_result['code'] ) ? (int) $main_list_result['code'] : 0;
+            $this->log_newsletter_diagnostic_event(
+                'info',
+                'DOI_TEST result endpoint=/contacts/lists/{id} status=' . $remote_checks['main_list_status'] . ' body=' . wp_json_encode( $this->sanitize_newsletter_diag_response( isset( $main_list_result['data'] ) ? $main_list_result['data'] : [] ) )
+            );
+            if ( empty( $main_list_result['success'] ) ) {
+                $main_status = isset( $main_list_result['code'] ) ? (int) $main_list_result['code'] : 0;
+                $main_code = 404 === $main_status ? 'invalid_main_list_id' : 'brevo_list_check_failed';
+                $errors[] = $this->build_newsletter_diag_error(
+                    $main_code,
+                    __( 'Main list ID validation failed.', 'bw' ),
+                    isset( $main_list_result['error'] ) ? sanitize_text_field( (string) $main_list_result['error'] ) : '',
+                    $remote_checks['main_list_status'],
+                    isset( $main_list_result['data'] ) ? $this->sanitize_newsletter_diag_response( $main_list_result['data'] ) : []
+                );
+            }
+
+            $this->log_newsletter_diagnostic_event( 'info', 'DOI_TEST endpoint=/contacts/lists/{id} query=list_id=' . $unconfirmed_list_id );
+            $pending_list_result = $client->get_list( $unconfirmed_list_id );
+            $remote_checks['unconfirmed_list_status'] = isset( $pending_list_result['code'] ) ? (int) $pending_list_result['code'] : 0;
+            $this->log_newsletter_diagnostic_event(
+                'info',
+                'DOI_TEST result endpoint=/contacts/lists/{id} status=' . $remote_checks['unconfirmed_list_status'] . ' body=' . wp_json_encode( $this->sanitize_newsletter_diag_response( isset( $pending_list_result['data'] ) ? $pending_list_result['data'] : [] ) )
+            );
+            if ( empty( $pending_list_result['success'] ) ) {
+                $pending_status = isset( $pending_list_result['code'] ) ? (int) $pending_list_result['code'] : 0;
+                $pending_code = 404 === $pending_status ? 'invalid_unconfirmed_list_id' : 'brevo_list_check_failed';
+                $errors[] = $this->build_newsletter_diag_error(
+                    $pending_code,
+                    __( 'Unconfirmed list ID validation failed.', 'bw' ),
+                    isset( $pending_list_result['error'] ) ? sanitize_text_field( (string) $pending_list_result['error'] ) : '',
+                    $remote_checks['unconfirmed_list_status'],
+                    isset( $pending_list_result['data'] ) ? $this->sanitize_newsletter_diag_response( $pending_list_result['data'] ) : []
+                );
+            }
+
+            $this->log_newsletter_diagnostic_event( 'info', 'DOI_TEST endpoint=/smtp/templates/{id} query=template_id=' . $template_id );
+            $template_result = $client->get_smtp_template( $template_id );
+            $remote_checks['template_status'] = isset( $template_result['code'] ) ? (int) $template_result['code'] : 0;
+            $this->log_newsletter_diagnostic_event(
+                'info',
+                'DOI_TEST result endpoint=/smtp/templates/{id} status=' . $remote_checks['template_status'] . ' body=' . wp_json_encode( $this->sanitize_newsletter_diag_response( isset( $template_result['data'] ) ? $template_result['data'] : [] ) )
+            );
+            if ( empty( $template_result['success'] ) ) {
+                $template_status = isset( $template_result['code'] ) ? (int) $template_result['code'] : 0;
+                $template_code = 404 === $template_status ? 'invalid_doi_template_id' : 'brevo_template_check_failed';
+                $errors[] = $this->build_newsletter_diag_error(
+                    $template_code,
+                    __( 'DOI template ID validation failed.', 'bw' ),
+                    isset( $template_result['error'] ) ? sanitize_text_field( (string) $template_result['error'] ) : '',
+                    $remote_checks['template_status'],
+                    isset( $template_result['data'] ) ? $this->sanitize_newsletter_diag_response( $template_result['data'] ) : []
+                );
+            }
+
+            if ( empty( $errors ) ) {
+                $this->log_newsletter_diagnostic_event(
+                    'info',
+                    sprintf(
+                        'DOI_TEST submit payload check endpoint=/contacts/doubleOptinConfirmation includeListIds=[%d] templateId=%d redirectionUrl=%s pending_pre_upsert_list=%d',
+                        (int) $main_list_id,
+                        (int) $template_id,
+                        $redirect_url,
+                        (int) $unconfirmed_list_id
+                    )
+                );
             }
         }
 
@@ -3403,5 +3447,80 @@ class BW_Checkout_Subscribe_Admin {
 
         $tail = array_slice( $lines, -1 * $max_lines );
         return array_map( 'sanitize_text_field', $tail );
+    }
+
+    /**
+     * Build structured newsletter diagnostics error.
+     *
+     * @param string $code Error code.
+     * @param string $message Human message.
+     * @param string $details Technical details.
+     * @param int    $status API status.
+     * @param array  $response API response.
+     * @return array
+     */
+    private function build_newsletter_diag_error( $code, $message, $details = '', $status = 0, $response = [] ) {
+        return [
+            'code'           => sanitize_key( (string) $code ),
+            'message'        => sanitize_text_field( (string) $message ),
+            'details'        => sanitize_textarea_field( (string) $details ),
+            'brevo_status'   => (int) $status,
+            'brevo_response' => $this->sanitize_newsletter_diag_response( $response ),
+        ];
+    }
+
+    /**
+     * Sanitize diagnostics response body.
+     *
+     * @param mixed $response Raw response.
+     * @return array
+     */
+    private function sanitize_newsletter_diag_response( $response ) {
+        if ( ! is_array( $response ) ) {
+            return [];
+        }
+
+        $safe = [];
+        foreach ( [ 'code', 'message', 'id', 'name' ] as $key ) {
+            if ( isset( $response[ $key ] ) ) {
+                $safe[ $key ] = sanitize_textarea_field( (string) $response[ $key ] );
+            }
+        }
+        return $safe;
+    }
+
+    /**
+     * Log diagnostic events for newsletter DOI checks.
+     *
+     * @param string $level Log level.
+     * @param string $message Message.
+     * @return void
+     */
+    private function log_newsletter_diagnostic_event( $level, $message ) {
+        $settings = BW_Mail_Marketing_Settings::get_general_settings();
+        if ( empty( $settings['newsletter_debug_logging'] ) ) {
+            return;
+        }
+
+        if ( function_exists( 'wc_get_logger' ) ) {
+            $logger = wc_get_logger();
+            $context = [ 'source' => 'blackwork-newsletter', 'context' => 'doi_diagnostics' ];
+            if ( 'error' === $level ) {
+                $logger->error( $message, $context );
+            } elseif ( 'warning' === $level ) {
+                $logger->warning( $message, $context );
+            } else {
+                $logger->info( $message, $context );
+            }
+            return;
+        }
+
+        $upload_dir = wp_upload_dir();
+        $base_dir = isset( $upload_dir['basedir'] ) ? (string) $upload_dir['basedir'] : '';
+        if ( '' === $base_dir ) {
+            return;
+        }
+        $line = sprintf( "[%s] [%s] %s\n", gmdate( 'Y-m-d H:i:s' ), strtoupper( sanitize_key( (string) $level ) ), sanitize_text_field( (string) $message ) );
+        error_log( $line, 3, trailingslashit( $base_dir ) . 'blackwork-newsletter-debug.log' );
     }
 }

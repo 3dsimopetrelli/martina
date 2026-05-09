@@ -56,11 +56,51 @@ class BW_Brevo_Client {
      * @return array
      */
     public function get_lists( $limit = 50, $offset = 0 ) {
-        $limit = max( 1, min( 500, absint( $limit ) ) );
+        $limit = max( 1, min( 50, absint( $limit ) ) );
         $offset = max( 0, absint( $offset ) );
 
         $path = sprintf( '/contacts/lists?limit=%d&offset=%d', $limit, $offset );
         return $this->request( 'GET', $path );
+    }
+
+    /**
+     * Fetch a Brevo list by ID.
+     *
+     * @param int $list_id List ID.
+     *
+     * @return array
+     */
+    public function get_list( $list_id ) {
+        $list_id = absint( $list_id );
+        if ( $list_id <= 0 ) {
+            return [
+                'success' => false,
+                'error'   => 'Invalid list ID',
+                'code'    => 0,
+            ];
+        }
+
+        return $this->request( 'GET', '/contacts/lists/' . $list_id );
+    }
+
+    /**
+     * Fetch a Brevo SMTP template by ID.
+     *
+     * @param int $template_id Template ID.
+     *
+     * @return array
+     */
+    public function get_smtp_template( $template_id ) {
+        $template_id = absint( $template_id );
+        if ( $template_id <= 0 ) {
+            return [
+                'success' => false,
+                'error'   => 'Invalid template ID',
+                'code'    => 0,
+            ];
+        }
+
+        return $this->request( 'GET', '/smtp/templates/' . $template_id );
     }
 
     /**
