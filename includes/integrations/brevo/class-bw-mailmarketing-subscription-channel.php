@@ -155,7 +155,7 @@ if ( ! class_exists( 'BW_MailMarketing_Subscription_Channel' ) ) {
                 $api_key = isset( $general_settings['api_key'] ) ? sanitize_text_field( (string) $general_settings['api_key'] ) : '';
                 if ( '' === $api_key ) {
                     $this->log_event( 'error', 'Missing Brevo API key for subscription widget.', $email, $source_key, 'missing_settings' );
-                    $this->send_response( false, 'generic_failure', $this->get_error_message( $channel_settings ), 200, [], __( 'Missing API key', 'bw' ) );
+                    $this->send_response( false, 'missing_api_key', __( 'Newsletter configuration is incomplete.', 'bw' ), 200, [], __( 'Missing API key', 'bw' ) );
                     return;
                 }
 
@@ -164,7 +164,7 @@ if ( ! class_exists( 'BW_MailMarketing_Subscription_Channel' ) ) {
                     : 0;
                 if ( $list_id <= 0 ) {
                     $this->log_event( 'error', 'Missing Brevo list ID for subscription widget.', $email, $source_key, 'missing_list_id' );
-                    $this->send_response( false, 'generic_failure', $this->get_error_message( $channel_settings ), 200, [], __( 'Invalid main list ID', 'bw' ) );
+                    $this->send_response( false, 'invalid_main_list_id', __( 'Newsletter configuration is incomplete.', 'bw' ), 200, [], __( 'Invalid main list ID', 'bw' ) );
                     return;
                 }
 
@@ -228,22 +228,22 @@ if ( ! class_exists( 'BW_MailMarketing_Subscription_Channel' ) ) {
 
                 if ( $template_id <= 0 ) {
                     $this->log_event( 'error', 'Missing DOI template ID for subscription widget.', $email, $source_key, 'missing_doi_template' );
-                    $this->send_response( false, 'generic_failure', $this->get_error_message( $channel_settings ), 200, [], __( 'Invalid DOI template ID', 'bw' ) );
+                    $this->send_response( false, 'invalid_doi_template_id', __( 'Newsletter configuration is incomplete.', 'bw' ), 200, [], __( 'Invalid DOI template ID', 'bw' ) );
                     return;
                 }
                 if ( ! $this->is_valid_absolute_url( $redirect_url ) ) {
                     $this->log_event( 'error', 'Invalid DOI redirect URL for subscription widget.', $email, $source_key, 'invalid_doi_redirect_url' );
-                    $this->send_response( false, 'generic_failure', $this->get_error_message( $channel_settings ), 200, [], __( 'Invalid DOI redirect URL', 'bw' ) );
+                    $this->send_response( false, 'invalid_redirect_url', __( 'Newsletter configuration is incomplete.', 'bw' ), 200, [], __( 'Invalid DOI redirect URL', 'bw' ) );
                     return;
                 }
                 if ( $unconfirmed_list_id <= 0 ) {
                     $this->log_event( 'error', 'Missing unconfirmed list ID for DOI subscription widget.', $email, $source_key, 'missing_unconfirmed_list_id' );
-                    $this->send_response( false, 'generic_failure', $this->get_error_message( $channel_settings ), 200, [], __( 'Invalid unconfirmed list ID', 'bw' ) );
+                    $this->send_response( false, 'invalid_unconfirmed_list_id', __( 'Newsletter configuration is incomplete.', 'bw' ), 200, [], __( 'Invalid unconfirmed list ID', 'bw' ) );
                     return;
                 }
                 if ( '' !== $sender_email && ! is_email( $sender_email ) ) {
                     $this->log_event( 'error', 'Invalid sender email configured for DOI subscription widget.', $email, $source_key, 'invalid_sender_email' );
-                    $this->send_response( false, 'generic_failure', $this->get_error_message( $channel_settings ), 200, [], __( 'Invalid sender email', 'bw' ) );
+                    $this->send_response( false, 'invalid_sender_email', __( 'Newsletter configuration is incomplete.', 'bw' ), 200, [], __( 'Invalid sender email', 'bw' ) );
                     return;
                 }
 
@@ -294,8 +294,9 @@ if ( ! class_exists( 'BW_MailMarketing_Subscription_Channel' ) ) {
 
                 if ( empty( $pending_result['success'] ) ) {
                     $provider_error = ! empty( $pending_result['error'] ) ? sanitize_text_field( (string) $pending_result['error'] ) : '';
+                    $error_payload = $this->build_brevo_error_payload( $pending_result, 'double_opt_in' );
                     $this->log_event( 'error', 'Failed to add contact to unconfirmed list before DOI.' . ( '' !== $provider_error ? ' ' . $provider_error : '' ), $email, $source_key, 'error' );
-                    $this->send_response( false, 'generic_failure', $this->get_error_message( $channel_settings ), 200, [], $provider_error );
+                    $this->send_response( false, $error_payload['code'], $this->get_error_message( $channel_settings ), 200, [ 'brevo_status' => $error_payload['brevo_status'], 'brevo_response' => $error_payload['brevo_response'] ], $error_payload['details'] );
                     return;
                 }
 
@@ -365,12 +366,13 @@ if ( ! class_exists( 'BW_MailMarketing_Subscription_Channel' ) ) {
             }
 
                 if ( empty( $result['success'] ) ) {
-                $provider_error = ! empty( $result['error'] ) ? sanitize_text_field( (string) $result['error'] ) : '';
-                if ( '' !== $attribute_warning ) {
-                    $this->log_event( 'warning', 'BW_BREVO_ATTR_INVALID: Widget submit failed with unsupported attributes. ' . $attribute_warning, $email, $source_key, 'warning' );
-                }
-                $this->log_event( 'error', 'Widget subscribe failed.' . ( '' !== $provider_error ? ' ' . $provider_error : '' ), $email, $source_key, 'error' );
-                    $this->send_response( false, 'generic_failure', $this->get_error_message( $channel_settings ), 200, [], $provider_error );
+                    $provider_error = ! empty( $result['error'] ) ? sanitize_text_field( (string) $result['error'] ) : '';
+                    $error_payload = $this->build_brevo_error_payload( $result, $mode );
+                    if ( '' !== $attribute_warning ) {
+                        $this->log_event( 'warning', 'BW_BREVO_ATTR_INVALID: Widget submit failed with unsupported attributes. ' . $attribute_warning, $email, $source_key, 'warning' );
+                    }
+                    $this->log_event( 'error', 'Widget subscribe failed.' . ( '' !== $provider_error ? ' ' . $provider_error : '' ), $email, $source_key, 'error' );
+                    $this->send_response( false, $error_payload['code'], $this->get_error_message( $channel_settings ), 200, [ 'brevo_status' => $error_payload['brevo_status'], 'brevo_response' => $error_payload['brevo_response'] ], $error_payload['details'] );
                     return;
                 }
 
@@ -405,7 +407,7 @@ if ( ! class_exists( 'BW_MailMarketing_Subscription_Channel' ) ) {
                 $email = isset( $email ) ? (string) $email : '';
                 $this->log_exception_event( $exception, $email, $source_key, $general_settings );
                 $details = ! empty( $general_settings['newsletter_debug_logging'] ) ? $exception->getMessage() : '';
-                $this->send_response( false, 'unexpected_error', __( 'Unexpected newsletter error. Please try again.', 'bw' ), 200, [], $details );
+                $this->send_response( false, 'unknown_newsletter_error', __( 'Unexpected newsletter error. Please try again.', 'bw' ), 200, [ 'brevo_status' => 0, 'brevo_response' => [] ], $details );
             }
         }
 
@@ -565,6 +567,65 @@ if ( ! class_exists( 'BW_MailMarketing_Subscription_Channel' ) ) {
             }
 
             wp_send_json_error( $payload, $status );
+        }
+
+        /**
+         * Build structured Brevo error payload for frontend and diagnostics.
+         *
+         * @param array  $result Brevo client result.
+         * @param string $mode   Opt-in mode.
+         * @return array
+         */
+        private function build_brevo_error_payload( $result, $mode ) {
+            $status = isset( $result['code'] ) ? (int) $result['code'] : 0;
+            $error_message = isset( $result['error'] ) ? sanitize_textarea_field( (string) $result['error'] ) : '';
+            $response_data = isset( $result['data'] ) && is_array( $result['data'] ) ? $result['data'] : [];
+            $response_text = strtolower( $error_message );
+            $response_json = wp_json_encode( $response_data );
+            if ( is_string( $response_json ) ) {
+                $response_text .= ' ' . strtolower( $response_json );
+            }
+
+            $code = 'brevo_api_error';
+            if ( 0 === $status ) {
+                $code = 'brevo_network_error';
+            } elseif ( false !== strpos( $response_text, 'sender' ) && ( false !== strpos( $response_text, 'invalid' ) || false !== strpos( $response_text, 'verify' ) || false !== strpos( $response_text, 'authenticated' ) ) ) {
+                $code = 'brevo_sender_rejected';
+            } elseif ( false !== strpos( $response_text, 'template' ) ) {
+                $code = 'brevo_template_rejected';
+            } elseif ( false !== strpos( $response_text, 'list' ) ) {
+                $code = 'brevo_list_rejected';
+            } elseif ( 'double_opt_in' === $mode ) {
+                $code = 'brevo_double_optin_rejected';
+            }
+
+            return [
+                'code' => $code,
+                'details' => '' !== $error_message ? $error_message : __( 'Brevo request failed.', 'bw' ),
+                'brevo_status' => $status,
+                'brevo_response' => $this->sanitize_brevo_response_payload( $response_data ),
+            ];
+        }
+
+        /**
+         * Sanitize Brevo response data before returning to frontend.
+         *
+         * @param array $payload Brevo payload.
+         * @return array
+         */
+        private function sanitize_brevo_response_payload( $payload ) {
+            if ( ! is_array( $payload ) ) {
+                return [];
+            }
+
+            $safe = [];
+            foreach ( [ 'code', 'message' ] as $key ) {
+                if ( isset( $payload[ $key ] ) ) {
+                    $safe[ $key ] = sanitize_textarea_field( (string) $payload[ $key ] );
+                }
+            }
+
+            return $safe;
         }
 
         /**

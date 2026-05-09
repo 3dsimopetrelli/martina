@@ -142,6 +142,7 @@ $newsletter_messages = [
 ];
 $general_mail_settings = class_exists( 'BW_Mail_Marketing_Settings' ) ? BW_Mail_Marketing_Settings::get_general_settings() : [];
 $newsletter_debug_logging = ! empty( $general_mail_settings['newsletter_debug_logging'] );
+$newsletter_debug_admin = current_user_can( 'manage_options' );
 
 if (class_exists('BW_Mail_Marketing_Settings')) {
     $subscription_settings = BW_Mail_Marketing_Settings::get_subscription_settings();
@@ -189,6 +190,7 @@ $frontend_config = [
         'nonce' => wp_create_nonce('bw_mail_marketing_subscription_submit'),
         'consentRequired' => $newsletter_consent_required ? 1 : 0,
         'debugLogging' => $newsletter_debug_logging ? 1 : 0,
+        'isAdmin' => $newsletter_debug_admin ? 1 : 0,
         'messages' => $newsletter_messages,
     ],
 ];

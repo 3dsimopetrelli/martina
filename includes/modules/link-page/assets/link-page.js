@@ -280,6 +280,7 @@
         var nonce = typeof config.nonce === 'string' ? config.nonce : '';
         var consentRequired = Number(config.consentRequired || 0) === 1;
         var debugLogging = Number(config.debugLogging || 0) === 1;
+        var isAdmin = Number(config.isAdmin || 0) === 1;
         var messages = (config.messages && typeof config.messages === 'object') ? config.messages : {};
         var form = document.querySelector('.newsletter-form');
 
@@ -290,6 +291,25 @@
             }
 
             return fallback;
+        }
+
+        function shouldShowDebugDetails() {
+            return debugLogging || isAdmin;
+        }
+
+        function buildFrontendErrorMessage(data) {
+            var safeMessage = 'Unable to subscribe right now. Please try again later.';
+            if (!data || typeof data !== 'object') {
+                return safeMessage;
+            }
+
+            if (!shouldShowDebugDetails()) {
+                return safeMessage;
+            }
+
+            var code = (typeof data.code === 'string' && data.code.trim() !== '') ? data.code.trim() : 'unknown_newsletter_error';
+            var details = (typeof data.details === 'string' && data.details.trim() !== '') ? data.details.trim() : '';
+            return details ? ('Newsletter error: ' + code + ' — ' + details) : ('Newsletter error: ' + code);
         }
 
         if (!enabled || !form || !endpoint || !nonce) {
@@ -419,9 +439,12 @@
                         return;
                     }
 
-                    setNewsletterMessage(form, 'is-error', getMessage('genericFailure', 'Something went wrong. Please try again.'));
+                    setNewsletterMessage(form, 'is-error', buildFrontendErrorMessage(data ? data.data : null));
                     if (debugLogging && typeof console !== 'undefined' && console.warn && data && data.data && data.data.code) {
                         console.warn('[Blackwork Link Page Newsletter] Error code:', data.data.code);
+                    }
+                    if ((debugLogging || isAdmin) && typeof console !== 'undefined' && console.error) {
+                        console.error('[Blackwork Link Page Newsletter] Structured error response:', data);
                     }
                 })
                 .catch(function () {
