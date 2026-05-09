@@ -213,6 +213,7 @@ if ( ! class_exists( 'BW_MailMarketing_Subscription_Channel' ) ) {
             $mode = class_exists( 'BW_MailMarketing_Service' )
                 ? BW_MailMarketing_Service::resolve_channel_optin_mode( $general_settings, $channel_settings )
                 : 'single_opt_in';
+            $debug_enabled = $this->is_debug_logging_enabled( $general_settings );
 
             $result = [];
             $attribute_warning = '';
@@ -220,32 +221,75 @@ if ( ! class_exists( 'BW_MailMarketing_Subscription_Channel' ) ) {
             if ( 'double_opt_in' === $mode ) {
                 $template_id = isset( $general_settings['double_optin_template_id'] ) ? absint( $general_settings['double_optin_template_id'] ) : 0;
                 $redirect_url = isset( $general_settings['double_optin_redirect_url'] ) ? esc_url_raw( (string) $general_settings['double_optin_redirect_url'] ) : '';
+                $unconfirmed_list_id = isset( $general_settings['unconfirmed_list_id'] ) ? absint( $general_settings['unconfirmed_list_id'] ) : 0;
+                $sender_email = isset( $general_settings['sender_email'] ) ? sanitize_email( (string) $general_settings['sender_email'] ) : '';
+                $sender_name = isset( $general_settings['sender_name'] ) ? sanitize_text_field( (string) $general_settings['sender_name'] ) : '';
 
-                if ( $template_id <= 0 || '' === $redirect_url ) {
-                    $this->log_event( 'error', 'Missing DOI template or redirect URL for subscription widget.', $email, $source_key, 'error' );
+                if ( $template_id <= 0 ) {
+                    $this->log_event( 'error', 'Missing DOI template ID for subscription widget.', $email, $source_key, 'missing_doi_template' );
+                    $this->send_response( false, 'generic_failure', $this->get_error_message( $channel_settings ), 500 );
+                    return;
+                }
+                if ( ! $this->is_valid_absolute_url( $redirect_url ) ) {
+                    $this->log_event( 'error', 'Invalid DOI redirect URL for subscription widget.', $email, $source_key, 'invalid_doi_redirect_url' );
+                    $this->send_response( false, 'generic_failure', $this->get_error_message( $channel_settings ), 500 );
+                    return;
+                }
+                if ( $unconfirmed_list_id <= 0 ) {
+                    $this->log_event( 'error', 'Missing unconfirmed list ID for DOI subscription widget.', $email, $source_key, 'missing_unconfirmed_list_id' );
+                    $this->send_response( false, 'generic_failure', $this->get_error_message( $channel_settings ), 500 );
+                    return;
+                }
+                if ( '' !== $sender_email && ! is_email( $sender_email ) ) {
+                    $this->log_event( 'error', 'Invalid sender email configured for DOI subscription widget.', $email, $source_key, 'invalid_sender_email' );
                     $this->send_response( false, 'generic_failure', $this->get_error_message( $channel_settings ), 500 );
                     return;
                 }
 
                 $sender = [];
-                if ( ! empty( $general_settings['sender_email'] ) ) {
-                    $sender['email'] = sanitize_email( (string) $general_settings['sender_email'] );
+                if ( '' !== $sender_email ) {
+                    $sender['email'] = $sender_email;
                 }
-                if ( ! empty( $general_settings['sender_name'] ) ) {
-                    $sender['name'] = sanitize_text_field( (string) $general_settings['sender_name'] );
+                if ( '' !== $sender_name ) {
+                    $sender['name'] = $sender_name;
                 }
 
-                // Pre-assign contact to the Unconfirmed list so the pending subscriber
-                // is visible in Brevo immediately, before they click the confirmation link.
-                // Brevo's DOI endpoint only adds to includeListIds AFTER confirmation,
-                // so without this step the contact would be invisible until confirmed.
-                $unconfirmed_list_id = isset( $general_settings['unconfirmed_list_id'] ) ? absint( $general_settings['unconfirmed_list_id'] ) : 0;
-                if ( $unconfirmed_list_id > 0 ) {
-                    $client->upsert_contact( $email, $attributes, [ $unconfirmed_list_id ] );
-                    // Non-fatal: failure here does not block the DOI email from being sent.
+                if ( $debug_enabled ) {
+                    $this->log_event(
+                        'info',
+                        sprintf(
+                            'BREVO_SUBSCRIBE_DEBUG: mode=double_opt_in list_id=%d unconfirmed_list_id=%d template_id=%d redirect_url=%s endpoint=%s sender_email=%s',
+                            (int) $list_id,
+                            (int) $unconfirmed_list_id,
+                            (int) $template_id,
+                            $redirect_url,
+                            '/contacts/doubleOptinConfirmation',
+                            '' !== $sender_email ? $sender_email : 'empty'
+                        ),
+                        $email,
+                        $source_key,
+                        'debug'
+                    );
+                }
+
+                // Pre-assign contact only to the unconfirmed list. The main list is added
+                // by Brevo after the contact confirms via DOI.
+                $pending_result = $client->upsert_contact( $email, $attributes, [ $unconfirmed_list_id ] );
+                if ( $debug_enabled ) {
+                    $this->log_brevo_result( 'upsert_pending', $pending_result, $email, $source_key );
+                }
+
+                if ( empty( $pending_result['success'] ) ) {
+                    $provider_error = ! empty( $pending_result['error'] ) ? sanitize_text_field( (string) $pending_result['error'] ) : '';
+                    $this->log_event( 'error', 'Failed to add contact to unconfirmed list before DOI.' . ( '' !== $provider_error ? ' ' . $provider_error : '' ), $email, $source_key, 'error' );
+                    $this->send_response( false, 'generic_failure', $this->get_error_message( $channel_settings ), 500 );
+                    return;
                 }
 
                 $result = $client->send_double_opt_in( $email, $template_id, $redirect_url, [ $list_id ], $attributes, $sender );
+                if ( $debug_enabled ) {
+                    $this->log_brevo_result( 'double_opt_in', $result, $email, $source_key );
+                }
                 if ( empty( $result['success'] ) && class_exists( 'BW_MailMarketing_Service' ) && BW_MailMarketing_Service::is_unknown_attribute_error( $result ) ) {
                     $attribute_warning = isset( $result['error'] ) ? sanitize_text_field( (string) $result['error'] ) : __( 'Brevo rejected custom attributes.', 'bw' );
                     $this->log_event( 'warning', 'BW_BREVO_ATTR_INVALID: Retrying DOI widget submit without marketing attributes.', $email, $source_key, 'warning' );
@@ -257,18 +301,46 @@ if ( ! class_exists( 'BW_MailMarketing_Subscription_Channel' ) ) {
                         BW_MailMarketing_Service::strip_marketing_attributes( $attributes ),
                         $sender
                     );
+                    if ( $debug_enabled ) {
+                        $this->log_brevo_result( 'double_opt_in_retry_minimal', $result, $email, $source_key );
+                    }
                     if ( empty( $result['success'] ) && BW_MailMarketing_Service::is_unknown_attribute_error( $result ) ) {
                         $result = $client->send_double_opt_in( $email, $template_id, $redirect_url, [ $list_id ], [], $sender );
+                        if ( $debug_enabled ) {
+                            $this->log_brevo_result( 'double_opt_in_retry_no_attributes', $result, $email, $source_key );
+                        }
                     }
                 }
             } else {
+                if ( $debug_enabled ) {
+                    $this->log_event(
+                        'info',
+                        sprintf(
+                            'BREVO_SUBSCRIBE_DEBUG: mode=single_opt_in list_id=%d endpoint=%s',
+                            (int) $list_id,
+                            '/contacts'
+                        ),
+                        $email,
+                        $source_key,
+                        'debug'
+                    );
+                }
                 $result = $client->upsert_contact( $email, $attributes, [ $list_id ] );
+                if ( $debug_enabled ) {
+                    $this->log_brevo_result( 'upsert_single_opt_in', $result, $email, $source_key );
+                }
                 if ( empty( $result['success'] ) && class_exists( 'BW_MailMarketing_Service' ) && BW_MailMarketing_Service::is_unknown_attribute_error( $result ) ) {
                     $attribute_warning = isset( $result['error'] ) ? sanitize_text_field( (string) $result['error'] ) : __( 'Brevo rejected custom attributes.', 'bw' );
                     $this->log_event( 'warning', 'BW_BREVO_ATTR_INVALID: Retrying widget submit without marketing attributes.', $email, $source_key, 'warning' );
                     $result = $client->upsert_contact( $email, BW_MailMarketing_Service::strip_marketing_attributes( $attributes ), [ $list_id ] );
+                    if ( $debug_enabled ) {
+                        $this->log_brevo_result( 'upsert_single_opt_in_retry_minimal', $result, $email, $source_key );
+                    }
                     if ( empty( $result['success'] ) && BW_MailMarketing_Service::is_unknown_attribute_error( $result ) ) {
                         $result = $client->upsert_contact( $email, [], [ $list_id ] );
+                        if ( $debug_enabled ) {
+                            $this->log_brevo_result( 'upsert_single_opt_in_retry_no_attributes', $result, $email, $source_key );
+                        }
                     }
                 }
             }
@@ -499,6 +571,75 @@ if ( ! class_exists( 'BW_MailMarketing_Subscription_Channel' ) ) {
             }
 
             $logger->info( $message, $context );
+        }
+
+        /**
+         * Check if debug logging is enabled in general Mail Marketing settings.
+         *
+         * @param array $general_settings General settings.
+         *
+         * @return bool
+         */
+        private function is_debug_logging_enabled( $general_settings ) {
+            return ! empty( $general_settings['debug_logging'] );
+        }
+
+        /**
+         * Validate an absolute URL with scheme and host.
+         *
+         * @param string $url Candidate URL.
+         *
+         * @return bool
+         */
+        private function is_valid_absolute_url( $url ) {
+            $url = trim( (string) $url );
+            if ( '' === $url ) {
+                return false;
+            }
+
+            if ( ! wp_http_validate_url( $url ) ) {
+                return false;
+            }
+
+            $parts = wp_parse_url( $url );
+            if ( ! is_array( $parts ) ) {
+                return false;
+            }
+
+            return ! empty( $parts['scheme'] ) && ! empty( $parts['host'] );
+        }
+
+        /**
+         * Log Brevo response payload for debug diagnostics.
+         *
+         * @param string $operation  Operation label.
+         * @param array  $result     Brevo client result.
+         * @param string $email      Contact email.
+         * @param string $source_key Consent/source key.
+         *
+         * @return void
+         */
+        private function log_brevo_result( $operation, $result, $email, $source_key ) {
+            $safe_result = [
+                'success' => ! empty( $result['success'] ) ? 1 : 0,
+                'code'    => isset( $result['code'] ) ? (int) $result['code'] : 0,
+                'error'   => isset( $result['error'] ) ? sanitize_textarea_field( (string) $result['error'] ) : '',
+            ];
+
+            if ( isset( $result['data'] ) ) {
+                $encoded_data = wp_json_encode( $result['data'] );
+                if ( is_string( $encoded_data ) ) {
+                    $safe_result['data'] = $encoded_data;
+                }
+            }
+
+            $this->log_event(
+                'info',
+                'BREVO_SUBSCRIBE_DEBUG_RESULT: operation=' . sanitize_key( (string) $operation ) . ' payload=' . wp_json_encode( $safe_result ),
+                $email,
+                $source_key,
+                'debug'
+            );
         }
 
         /**
