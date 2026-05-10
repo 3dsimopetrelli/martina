@@ -183,6 +183,15 @@ body:not(.elementor-editor-active) {
 }
 
 /**
+ * Thank You page (Elementor Canvas) must not receive smart-header body offset.
+ * Scoped only to page ID 20 to avoid affecting other routes.
+ */
+body.page-template-elementor_canvas.page-id-20 {
+    --smart-header-body-padding: 0px !important;
+    padding-top: 0 !important;
+}
+
+/**
  * Reset padding nell'editor di Elementor
  * Previene problemi di layout durante la modifica
  */
