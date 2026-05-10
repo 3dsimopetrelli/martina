@@ -515,6 +515,40 @@ add_filter('rank_math/opengraph/facebook/image', 'bw_seo_social_rankmath_prefer_
 add_filter('rank_math/opengraph/twitter/image', 'bw_seo_social_rankmath_prefer_jpg_png', 20);
 
 /**
+ * @return bool
+ */
+function bw_seo_social_is_link_page_request()
+{
+    if (!function_exists('bw_link_page_get_settings') || !is_page()) {
+        return false;
+    }
+
+    $settings = bw_link_page_get_settings();
+    $selected_id = !empty($settings['page_id']) ? (int) $settings['page_id'] : 0;
+
+    return $selected_id > 0 && is_page($selected_id);
+}
+
+/**
+ * Rank Math compatibility: suppress article-style Twitter label/data tags on Link Page.
+ *
+ * @param string $content
+ * @return string
+ */
+function bw_seo_social_rankmath_clean_link_page_twitter_meta($content)
+{
+    if (bw_seo_social_is_link_page_request()) {
+        return '';
+    }
+
+    return $content;
+}
+add_filter('rank_math/opengraph/twitter/label1', 'bw_seo_social_rankmath_clean_link_page_twitter_meta', 20);
+add_filter('rank_math/opengraph/twitter/data1', 'bw_seo_social_rankmath_clean_link_page_twitter_meta', 20);
+add_filter('rank_math/opengraph/twitter/label2', 'bw_seo_social_rankmath_clean_link_page_twitter_meta', 20);
+add_filter('rank_math/opengraph/twitter/data2', 'bw_seo_social_rankmath_clean_link_page_twitter_meta', 20);
+
+/**
  * Rank Math compatibility: provide fb:app_id only when Rank Math output is empty.
  *
  * @param string $content
@@ -550,11 +584,32 @@ function bw_seo_social_rankmath_fix_schema_name($data, $jsonld)
         return $data;
     }
 
+    $is_home_or_link_page = is_front_page() || bw_seo_social_is_link_page_request();
+
     array_walk_recursive($data, function (&$value) {
         if (is_string($value) && 'Martina Serrizzo' === $value) {
             $value = 'Martina Sarritzu';
         }
     });
+
+    // Prevent personal Gmail exposure in public homepage/Link Page schema.
+    if ($is_home_or_link_page) {
+        array_walk_recursive($data, function (&$value, $key) {
+            if (!is_string($value)) {
+                return;
+            }
+
+            $normalized = strtolower(trim($value));
+            if ('martina.sarritzu92@gmail.com' === $normalized) {
+                $value = 'hello@martinasarritzu.com';
+                return;
+            }
+
+            if ('email' === (string) $key && false !== strpos($normalized, '@gmail.com')) {
+                $value = '';
+            }
+        });
+    }
 
     return $data;
 }
