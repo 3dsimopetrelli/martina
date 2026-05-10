@@ -25,6 +25,73 @@ function bw_seo_social_get_settings()
 }
 
 /**
+ * Return canonical site name and auto-fix known typo variants.
+ *
+ * @return string
+ */
+function bw_seo_social_get_canonical_site_name()
+{
+    $name = bw_seo_social_normalize_text((string) get_bloginfo('name'), 200);
+    if ('Martina Serrizzo' === $name) {
+        return 'Martina Sarritzu';
+    }
+
+    return $name;
+}
+
+/**
+ * Prefer JPG/PNG social image when available for broader crawler compatibility.
+ *
+ * @param string $url
+ * @return string
+ */
+function bw_seo_social_prefer_jpg_png_image($url)
+{
+    $url = (string) $url;
+    if ('' === $url) {
+        return '';
+    }
+
+    $extension = strtolower((string) pathinfo((string) wp_parse_url($url, PHP_URL_PATH), PATHINFO_EXTENSION));
+    if (!in_array($extension, ['webp', 'avif'], true)) {
+        return $url;
+    }
+
+    $attachment_id = attachment_url_to_postid($url);
+    if ($attachment_id <= 0) {
+        return $url;
+    }
+
+    $attached_file = get_attached_file($attachment_id);
+    if (!is_string($attached_file) || '' === $attached_file) {
+        return $url;
+    }
+
+    $upload_dir = wp_get_upload_dir();
+    if (!is_array($upload_dir) || empty($upload_dir['basedir']) || empty($upload_dir['baseurl'])) {
+        return $url;
+    }
+
+    $base_dir = wp_normalize_path((string) $upload_dir['basedir']);
+    $base_url = (string) $upload_dir['baseurl'];
+    $attached_file = wp_normalize_path($attached_file);
+
+    foreach (['jpg', 'jpeg', 'png'] as $target_ext) {
+        $candidate_file = preg_replace('/\.[^.]+$/', '.' . $target_ext, $attached_file);
+        if (!is_string($candidate_file) || !file_exists($candidate_file)) {
+            continue;
+        }
+
+        if (0 === strpos($candidate_file, $base_dir)) {
+            $relative_path = ltrim(str_replace($base_dir, '', $candidate_file), '/');
+            return trailingslashit($base_url) . $relative_path;
+        }
+    }
+
+    return $url;
+}
+
+/**
  * @param mixed $raw
  * @return array<string,mixed>
  */
@@ -227,7 +294,7 @@ function bw_seo_social_build_context()
         $title = bw_seo_social_normalize_text((string) get_the_title(get_queried_object_id()), 200);
     }
     if ('' === $title) {
-        $title = bw_seo_social_normalize_text((string) get_bloginfo('name'), 200);
+        $title = bw_seo_social_get_canonical_site_name();
     }
     if ('' === $title && !empty($global_settings['default_title'])) {
         $title = bw_seo_social_normalize_text((string) $global_settings['default_title'], 200);
@@ -317,6 +384,8 @@ function bw_seo_social_build_context()
 
     $resolved_url = '' !== $canonical ? $canonical : home_url('/');
 
+    $image_url = bw_seo_social_prefer_jpg_png_image($image_url);
+
     return [
         'title' => $title,
         'description' => $description,
@@ -360,6 +429,10 @@ function bw_seo_social_render_fallback_tags()
     if ('' !== $title) {
         echo '<meta property="og:title" content="' . esc_attr($title) . '">' . "\n";
     }
+    $site_name = bw_seo_social_get_canonical_site_name();
+    if ('' !== $site_name) {
+        echo '<meta property="og:site_name" content="' . esc_attr($site_name) . '">' . "\n";
+    }
     if ('' !== $description) {
         echo '<meta property="og:description" content="' . esc_attr($description) . '">' . "\n";
     }
@@ -401,3 +474,50 @@ function bw_seo_social_render_fallback_tags()
     }
 }
 add_action('wp_head', 'bw_seo_social_render_fallback_tags', 6);
+
+/**
+ * Rank Math compatibility: normalize site name typo in OG + Schema.
+ */
+function bw_seo_social_rankmath_fix_site_name($content)
+{
+    $canonical = bw_seo_social_get_canonical_site_name();
+    if ('' === $canonical) {
+        return $content;
+    }
+
+    return 'Martina Serrizzo' === (string) $content ? $canonical : $content;
+}
+add_filter('rank_math/opengraph/facebook/og_site_name', 'bw_seo_social_rankmath_fix_site_name', 20);
+
+/**
+ * Rank Math compatibility: prefer JPG/PNG when OG image URL points to WEBP/AVIF.
+ */
+function bw_seo_social_rankmath_prefer_jpg_png($image_url)
+{
+    return bw_seo_social_prefer_jpg_png_image((string) $image_url);
+}
+add_filter('rank_math/opengraph/facebook/image', 'bw_seo_social_rankmath_prefer_jpg_png', 20);
+add_filter('rank_math/opengraph/twitter/image', 'bw_seo_social_rankmath_prefer_jpg_png', 20);
+
+/**
+ * Rank Math compatibility: normalize typo in JSON-LD Organization/WebSite name.
+ *
+ * @param array<string,mixed> $data
+ * @param array<string,mixed> $jsonld
+ * @return array<string,mixed>
+ */
+function bw_seo_social_rankmath_fix_schema_name($data, $jsonld)
+{
+    if (!is_array($data)) {
+        return $data;
+    }
+
+    array_walk_recursive($data, function (&$value) {
+        if (is_string($value) && 'Martina Serrizzo' === $value) {
+            $value = 'Martina Sarritzu';
+        }
+    });
+
+    return $data;
+}
+add_filter('rank_math/json_ld', 'bw_seo_social_rankmath_fix_schema_name', 20, 2);
