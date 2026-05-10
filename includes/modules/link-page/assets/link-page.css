@@ -26,6 +26,7 @@ body {
 
 body {
     min-height: 100vh;
+    min-height: 100svh;
     background: var(--bw-link-bg);
     background-image: var(--bw-link-bg-gradient), var(--bw-link-bg-image);
     background-size: 220% 220%, cover;
@@ -43,6 +44,7 @@ body {
 
 .wrapper {
     min-height: 100vh;
+    min-height: 100svh;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -680,7 +682,11 @@ body {
 
 @media (min-width: 640px) {
     .wrapper {
-        padding: 40px 16px;
+        justify-content: flex-start;
+        padding-top: clamp(24px, 7svh, 84px);
+        padding-bottom: clamp(24px, 5svh, 56px);
+        padding-left: 16px;
+        padding-right: 16px;
     }
 }
 
