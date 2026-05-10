@@ -530,6 +530,14 @@ function bw_seo_social_is_link_page_request()
 }
 
 /**
+ * @return bool
+ */
+function bw_seo_social_is_home_or_link_page_request()
+{
+    return is_front_page() || bw_seo_social_is_link_page_request();
+}
+
+/**
  * Rank Math compatibility: suppress article-style Twitter label/data tags on Link Page.
  *
  * @param string $content
@@ -537,7 +545,7 @@ function bw_seo_social_is_link_page_request()
  */
 function bw_seo_social_rankmath_clean_link_page_twitter_meta($content)
 {
-    if (bw_seo_social_is_link_page_request()) {
+    if (bw_seo_social_is_home_or_link_page_request()) {
         return '';
     }
 
@@ -584,7 +592,7 @@ function bw_seo_social_rankmath_fix_schema_name($data, $jsonld)
         return $data;
     }
 
-    $is_home_or_link_page = is_front_page() || bw_seo_social_is_link_page_request();
+    $is_home_or_link_page = bw_seo_social_is_home_or_link_page_request();
 
     array_walk_recursive($data, function (&$value) {
         if (is_string($value) && 'Martina Serrizzo' === $value) {
