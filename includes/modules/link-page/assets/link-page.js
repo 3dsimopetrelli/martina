@@ -49,14 +49,36 @@
         var appConfig = window.bwLinkPageConfig || {};
         var config = appConfig.analytics || {};
         var endpoint = typeof config.endpoint === 'string' ? config.endpoint : '';
-        var action = typeof config.action === 'string' ? config.action : 'bw_link_page_track_click';
-        var nonce = typeof config.nonce === 'string' ? config.nonce : '';
+        var clickAction = typeof config.clickAction === 'string'
+            ? config.clickAction
+            : (typeof config.action === 'string' ? config.action : 'bw_link_page_track_click');
+        var clickNonce = typeof config.clickNonce === 'string'
+            ? config.clickNonce
+            : (typeof config.nonce === 'string' ? config.nonce : '');
+        var viewAction = typeof config.viewAction === 'string' ? config.viewAction : 'bw_link_page_track_view';
+        var viewNonce = typeof config.viewNonce === 'string' ? config.viewNonce : '';
         var pageId = Number(config.pageId || 0);
         var enabled = !!config.enabled;
+        var viewTracked = false;
 
-        if (!enabled || !endpoint || !pageId) {
+        if (!enabled || !endpoint || !pageId || !clickNonce || !viewNonce) {
             return;
         }
+
+        function trackView() {
+            if (viewTracked) {
+                return;
+            }
+            viewTracked = true;
+
+            sendClick({
+                action: viewAction,
+                nonce: viewNonce,
+                page_id: String(pageId)
+            }, endpoint);
+        }
+
+        trackView();
 
         document.addEventListener('click', function (event) {
             var target = event.target;
@@ -78,8 +100,8 @@
             }
 
             sendClick({
-                action: action,
-                nonce: nonce,
+                action: clickAction,
+                nonce: clickNonce,
                 page_id: String(pageId),
                 link_id: linkId,
                 link_label: linkLabel,

@@ -179,8 +179,10 @@ $frontend_config = [
     'analytics' => [
         'enabled' => $should_load_tracking_js,
         'endpoint' => admin_url('admin-ajax.php'),
-        'action' => 'bw_link_page_track_click',
-        'nonce' => wp_create_nonce('bw_link_page_track_click'),
+        'clickAction' => 'bw_link_page_track_click',
+        'clickNonce' => wp_create_nonce('bw_link_page_track_click'),
+        'viewAction' => 'bw_link_page_track_view',
+        'viewNonce' => wp_create_nonce('bw_link_page_track_view'),
         'pageId' => $page_id,
     ],
     'newsletter' => [

@@ -8,7 +8,7 @@ if (!defined('BW_LINK_PAGE_OPTION')) {
 }
 
 if (!defined('BW_LINK_PAGE_DB_VERSION')) {
-    define('BW_LINK_PAGE_DB_VERSION', '1');
+    define('BW_LINK_PAGE_DB_VERSION', '2');
 }
 
 if (!defined('BW_LINK_PAGE_LOCAL_URL_WARNING_TRANSIENT_PREFIX')) {
@@ -392,10 +392,12 @@ function bw_link_page_install_clicks_table()
         link_id VARCHAR(80) NOT NULL,
         link_label TEXT NOT NULL,
         target_url TEXT NULL,
+        event_type VARCHAR(16) NOT NULL DEFAULT 'click',
         clicked_at DATETIME NOT NULL,
         PRIMARY KEY  (id),
         KEY page_id (page_id),
         KEY link_id (link_id),
+        KEY event_type (event_type),
         KEY clicked_at (clicked_at),
         KEY page_clicked_at (page_id, clicked_at)
     ) {$charset_collate};";
@@ -443,6 +445,26 @@ function bw_link_page_sanitize_link_id($raw_link_id)
     }
 
     return substr($link_id, 0, 80);
+}
+
+/**
+ * SQL clause for click events (including legacy rows before event_type migration).
+ *
+ * @return string
+ */
+function bw_link_page_click_event_where_clause()
+{
+    return "(event_type = 'click' OR event_type = '' OR event_type IS NULL)";
+}
+
+/**
+ * SQL clause for view events.
+ *
+ * @return string
+ */
+function bw_link_page_view_event_where_clause()
+{
+    return "event_type = 'view'";
 }
 
 function bw_link_page_debug_log($message, $context = [])
@@ -511,9 +533,10 @@ function bw_link_page_track_click_ajax()
             'link_id' => $link_id,
             'link_label' => $link_label,
             'target_url' => $target_url,
+            'event_type' => 'click',
             'clicked_at' => current_time('mysql'),
         ],
-        ['%d', '%s', '%s', '%s', '%s']
+        ['%d', '%s', '%s', '%s', '%s', '%s']
     );
 
     if (false === $inserted) {
@@ -533,6 +556,51 @@ function bw_link_page_track_click_ajax()
 }
 add_action('wp_ajax_bw_link_page_track_click', 'bw_link_page_track_click_ajax');
 add_action('wp_ajax_nopriv_bw_link_page_track_click', 'bw_link_page_track_click_ajax');
+
+function bw_link_page_track_view_ajax()
+{
+    bw_link_page_maybe_install_clicks_table();
+
+    if (!check_ajax_referer('bw_link_page_track_view', 'nonce', false)) {
+        wp_send_json_error(['message' => 'invalid_nonce'], 400);
+    }
+
+    // Prevent admin/editor sessions from polluting public view analytics.
+    if (is_user_logged_in() && current_user_can('manage_options')) {
+        wp_send_json_success(['ok' => true, 'skipped' => 'admin']);
+    }
+
+    $settings = bw_link_page_get_settings();
+    $configured_page_id = !empty($settings['page_id']) ? (int) $settings['page_id'] : 0;
+    $page_id = isset($_POST['page_id']) ? absint(wp_unslash($_POST['page_id'])) : 0;
+
+    if ($configured_page_id <= 0 || $page_id <= 0 || $configured_page_id !== $page_id) {
+        wp_send_json_error(['message' => 'invalid_page'], 400);
+    }
+
+    global $wpdb;
+
+    $inserted = $wpdb->insert(
+        bw_link_page_get_clicks_table_name(),
+        [
+            'page_id' => $page_id,
+            'link_id' => '__view__',
+            'link_label' => '__view__',
+            'target_url' => '',
+            'event_type' => 'view',
+            'clicked_at' => current_time('mysql'),
+        ],
+        ['%d', '%s', '%s', '%s', '%s', '%s']
+    );
+
+    if (false === $inserted) {
+        wp_send_json_error(['message' => 'insert_failed'], 500);
+    }
+
+    wp_send_json_success(['ok' => true]);
+}
+add_action('wp_ajax_bw_link_page_track_view', 'bw_link_page_track_view_ajax');
+add_action('wp_ajax_nopriv_bw_link_page_track_view', 'bw_link_page_track_view_ajax');
 
 function bw_link_page_add_admin_menu()
 {
@@ -581,16 +649,36 @@ function bw_link_page_get_analytics_summary($page_id)
     global $wpdb;
 
     $table = bw_link_page_get_clicks_table_name();
+    $click_where = bw_link_page_click_event_where_clause();
 
     $today_start = wp_date('Y-m-d 00:00:00', current_time('timestamp'));
     $seven_days_start = wp_date('Y-m-d H:i:s', strtotime('-7 days', current_time('timestamp')));
     $thirty_days_start = wp_date('Y-m-d H:i:s', strtotime('-30 days', current_time('timestamp')));
 
     return [
-        'total' => (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE page_id = %d", $page_id)),
-        'today' => (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE page_id = %d AND clicked_at >= %s", $page_id, $today_start)),
-        'last_7_days' => (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE page_id = %d AND clicked_at >= %s", $page_id, $seven_days_start)),
-        'last_30_days' => (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE page_id = %d AND clicked_at >= %s", $page_id, $thirty_days_start)),
+        'total' => (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE page_id = %d AND {$click_where}", $page_id)),
+        'today' => (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE page_id = %d AND {$click_where} AND clicked_at >= %s", $page_id, $today_start)),
+        'last_7_days' => (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE page_id = %d AND {$click_where} AND clicked_at >= %s", $page_id, $seven_days_start)),
+        'last_30_days' => (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE page_id = %d AND {$click_where} AND clicked_at >= %s", $page_id, $thirty_days_start)),
+    ];
+}
+
+function bw_link_page_get_analytics_views_summary($page_id)
+{
+    global $wpdb;
+
+    $table = bw_link_page_get_clicks_table_name();
+    $view_where = bw_link_page_view_event_where_clause();
+
+    $today_start = wp_date('Y-m-d 00:00:00', current_time('timestamp'));
+    $seven_days_start = wp_date('Y-m-d H:i:s', strtotime('-7 days', current_time('timestamp')));
+    $thirty_days_start = wp_date('Y-m-d H:i:s', strtotime('-30 days', current_time('timestamp')));
+
+    return [
+        'total' => (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE page_id = %d AND {$view_where}", $page_id)),
+        'today' => (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE page_id = %d AND {$view_where} AND clicked_at >= %s", $page_id, $today_start)),
+        'last_7_days' => (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE page_id = %d AND {$view_where} AND clicked_at >= %s", $page_id, $seven_days_start)),
+        'last_30_days' => (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE page_id = %d AND {$view_where} AND clicked_at >= %s", $page_id, $thirty_days_start)),
     ];
 }
 
@@ -599,13 +687,14 @@ function bw_link_page_get_analytics_daily_clicks($page_id)
     global $wpdb;
 
     $table = bw_link_page_get_clicks_table_name();
+    $click_where = bw_link_page_click_event_where_clause();
     $start = wp_date('Y-m-d 00:00:00', strtotime('-29 days', current_time('timestamp')));
 
     $rows = $wpdb->get_results(
         $wpdb->prepare(
             "SELECT DATE(clicked_at) AS click_day, COUNT(*) AS clicks
             FROM {$table}
-            WHERE page_id = %d AND clicked_at >= %s
+            WHERE page_id = %d AND {$click_where} AND clicked_at >= %s
             GROUP BY DATE(clicked_at)
             ORDER BY click_day ASC",
             $page_id,
@@ -637,18 +726,63 @@ function bw_link_page_get_analytics_daily_clicks($page_id)
     return $series;
 }
 
+function bw_link_page_get_analytics_daily_views($page_id)
+{
+    global $wpdb;
+
+    $table = bw_link_page_get_clicks_table_name();
+    $view_where = bw_link_page_view_event_where_clause();
+    $start = wp_date('Y-m-d 00:00:00', strtotime('-29 days', current_time('timestamp')));
+
+    $rows = $wpdb->get_results(
+        $wpdb->prepare(
+            "SELECT DATE(clicked_at) AS view_day, COUNT(*) AS views
+            FROM {$table}
+            WHERE page_id = %d AND {$view_where} AND clicked_at >= %s
+            GROUP BY DATE(clicked_at)
+            ORDER BY view_day ASC",
+            $page_id,
+            $start
+        ),
+        ARRAY_A
+    );
+
+    $mapped = [];
+    if (is_array($rows)) {
+        foreach ($rows as $row) {
+            if (empty($row['view_day'])) {
+                continue;
+            }
+            $mapped[(string) $row['view_day']] = (int) $row['views'];
+        }
+    }
+
+    $series = [];
+    for ($offset = 29; $offset >= 0; $offset--) {
+        $day = wp_date('Y-m-d', strtotime('-' . $offset . ' days', current_time('timestamp')));
+        $series[] = [
+            'date' => $day,
+            'label' => wp_date('M j', strtotime($day)),
+            'count' => isset($mapped[$day]) ? (int) $mapped[$day] : 0,
+        ];
+    }
+
+    return $series;
+}
+
 function bw_link_page_get_analytics_daily_breakdown($page_id)
 {
     global $wpdb;
 
     $table = bw_link_page_get_clicks_table_name();
+    $click_where = bw_link_page_click_event_where_clause();
     $start = wp_date('Y-m-d 00:00:00', strtotime('-29 days', current_time('timestamp')));
 
     $rows = $wpdb->get_results(
         $wpdb->prepare(
             "SELECT DATE(clicked_at) AS click_day, link_label, COUNT(*) AS clicks
             FROM {$table}
-            WHERE page_id = %d AND clicked_at >= %s
+            WHERE page_id = %d AND {$click_where} AND clicked_at >= %s
             GROUP BY DATE(clicked_at), link_label
             ORDER BY click_day ASC, clicks DESC, link_label ASC",
             $page_id,
@@ -689,6 +823,7 @@ function bw_link_page_get_analytics_link_rows($page_id)
     global $wpdb;
 
     $table = bw_link_page_get_clicks_table_name();
+    $click_where = bw_link_page_click_event_where_clause();
 
     $rows = $wpdb->get_results(
         $wpdb->prepare(
@@ -698,7 +833,7 @@ function bw_link_page_get_analytics_link_rows($page_id)
                 COUNT(*) AS total_clicks,
                 MAX(clicked_at) AS last_click
             FROM {$table}
-            WHERE page_id = %d
+            WHERE page_id = %d AND {$click_where}
             GROUP BY link_id
             ORDER BY total_clicks DESC, last_click DESC
             LIMIT 100",
@@ -1112,21 +1247,30 @@ function bw_link_page_render_analytics_tab($page_id)
     }
 
     $summary = bw_link_page_get_analytics_summary($page_id);
+    $views_summary = bw_link_page_get_analytics_views_summary($page_id);
     $daily_series = bw_link_page_get_analytics_daily_clicks($page_id);
+    $daily_views = bw_link_page_get_analytics_daily_views($page_id);
     $daily_breakdown = bw_link_page_get_analytics_daily_breakdown($page_id);
     $link_rows = bw_link_page_get_analytics_link_rows($page_id);
 
     $max_daily = 0;
-    foreach ($daily_series as $point) {
-        $max_daily = max($max_daily, (int) $point['count']);
+    foreach ($daily_series as $index => $point) {
+        $view_point = isset($daily_views[$index]) ? $daily_views[$index] : ['count' => 0];
+        $max_daily = max($max_daily, (int) $point['count'], (int) $view_point['count']);
     }
 
     $cards = [
         __('Total clicks', 'bw') => (int) $summary['total'],
-        __('Today', 'bw') => (int) $summary['today'],
-        __('Last 7 days', 'bw') => (int) $summary['last_7_days'],
-        __('Last 30 days', 'bw') => (int) $summary['last_30_days'],
+        __('Clicks today', 'bw') => (int) $summary['today'],
+        __('Clicks last 7 days', 'bw') => (int) $summary['last_7_days'],
+        __('Clicks last 30 days', 'bw') => (int) $summary['last_30_days'],
+        __('Total views', 'bw') => (int) $views_summary['total'],
+        __('Views today', 'bw') => (int) $views_summary['today'],
+        __('Views last 7 days', 'bw') => (int) $views_summary['last_7_days'],
+        __('Views last 30 days', 'bw') => (int) $views_summary['last_30_days'],
     ];
+    $conversion_rate = (int) $views_summary['total'] > 0 ? (((int) $summary['total'] / (int) $views_summary['total']) * 100) : 0;
+    $cards[__('Click conversion', 'bw')] = (int) round($conversion_rate) . '%';
 
     $refresh_url = admin_url('admin.php?page=bw-link-page-settings&tab=analytics');
 
@@ -1209,7 +1353,7 @@ function bw_link_page_render_analytics_tab($page_id)
                 margin-bottom: 0;
             }
         </style>
-        <div style="display:grid;grid-template-columns:repeat(4,minmax(130px,1fr));gap:12px;margin:16px 0 22px;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:16px 0 22px;">
             <?php foreach ($cards as $label => $value) : ?>
                 <div style="border:1px solid #d9d9d9;border-radius:10px;padding:12px;background:#fff;">
                     <div style="font-size:12px;color:#666;margin-bottom:6px;"><?php echo esc_html($label); ?></div>
@@ -1219,41 +1363,55 @@ function bw_link_page_render_analytics_tab($page_id)
         </div>
 
         <p style="margin:0 0 14px;color:#444;">
-            <?php esc_html_e('Clicks are stored internally in the WordPress database. No Google Analytics or external tracking is used.', 'bw'); ?>
+            <?php esc_html_e('Clicks and views are stored internally in the WordPress database. No Google Analytics or external tracking is used.', 'bw'); ?>
         </p>
 
-        <?php if ((int) $summary['total'] <= 0) : ?>
-            <p><?php esc_html_e('No link clicks yet.', 'bw'); ?></p>
+        <?php if ((int) $summary['total'] <= 0 && (int) $views_summary['total'] <= 0) : ?>
+            <p><?php esc_html_e('No Link Page activity yet.', 'bw'); ?></p>
             <?php return; ?>
         <?php endif; ?>
 
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:18px 0 10px;">
-            <h2 style="margin:0;"><?php esc_html_e('Daily Clicks (Last 30 Days)', 'bw'); ?></h2>
+            <h2 style="margin:0;"><?php esc_html_e('Daily Activity (Last 30 Days)', 'bw'); ?></h2>
             <a class="button" href="<?php echo esc_url($refresh_url); ?>"><?php esc_html_e('Refresh analytics', 'bw'); ?></a>
         </div>
+        <p style="margin:0 0 10px;color:#444;font-size:12px;">
+            <span style="display:inline-flex;align-items:center;gap:6px;margin-right:14px;"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#80FD03;"></span><?php esc_html_e('Green = Link clicks', 'bw'); ?></span>
+            <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#ef4a4a;"></span><?php esc_html_e('Red = Page views', 'bw'); ?></span>
+        </p>
         <div style="display:grid;grid-template-columns:repeat(30,minmax(0,1fr));gap:6px;align-items:end;min-height:150px;padding:14px;border:1px solid #d9d9d9;border-radius:10px;background:#fff;">
-            <?php foreach ($daily_series as $point) :
+            <?php foreach ($daily_series as $index => $point) :
                 $count = (int) $point['count'];
+                $views_count = isset($daily_views[$index]['count']) ? (int) $daily_views[$index]['count'] : 0;
                 $bar_max_height = 120;
                 $bar_min_height = 3;
-                $height_px = $max_daily > 0
+                $click_height_px = $max_daily > 0
                     ? max($bar_min_height, (int) floor(($count / $max_daily) * $bar_max_height))
                     : $bar_min_height;
-                $bar_color = $count > 0 ? '#80FD03' : '#dfe5d9';
+                $view_height_px = $max_daily > 0
+                    ? max($bar_min_height, (int) floor(($views_count / $max_daily) * $bar_max_height))
+                    : $bar_min_height;
+                $click_bar_color = $count > 0 ? '#80FD03' : '#dfe5d9';
+                $view_bar_color = $views_count > 0 ? '#ef4a4a' : '#f1d7d7';
                 $point_date = isset($point['date']) ? (string) $point['date'] : '';
                 $day_links = isset($daily_breakdown[$point_date]) && is_array($daily_breakdown[$point_date]) ? $daily_breakdown[$point_date] : [];
                 ?>
-                <div class="bw-link-page-chart-day" title="<?php echo esc_attr($point['date'] . ': ' . $count . ' clicks'); ?>" aria-label="<?php echo esc_attr($point['date'] . ': ' . $count . ' clicks'); ?>">
-                    <?php if ($count > 0) : ?>
+                <div class="bw-link-page-chart-day" title="<?php echo esc_attr($point['date'] . ': ' . $count . ' clicks, ' . $views_count . ' views'); ?>" aria-label="<?php echo esc_attr($point['date'] . ': ' . $count . ' clicks, ' . $views_count . ' views'); ?>">
+                    <?php if ($count > 0 || $views_count > 0) : ?>
                         <div class="bw-link-page-chart-tooltip" role="tooltip">
                             <div class="bw-link-page-chart-tooltip__date"><?php echo esc_html($point_date); ?></div>
                             <div class="bw-link-page-chart-tooltip__total">
                                 <?php
-                                /* translators: %d: total clicks */
-                                printf(esc_html__('Total: %d clicks', 'bw'), $count);
+                                printf(
+                                    /* translators: %d: clicks count */
+                                    esc_html__('Link clicks: %1$d', 'bw'),
+                                    $count
+                                );
                                 ?>
                             </div>
+                            <div class="bw-link-page-chart-tooltip__total"><?php printf(esc_html__('Page views: %d', 'bw'), $views_count); ?></div>
                             <?php if (!empty($day_links)) : ?>
+                                <div class="bw-link-page-chart-tooltip__total" style="margin-top:2px;"><?php esc_html_e('Links:', 'bw'); ?></div>
                                 <ul>
                                     <?php foreach ($day_links as $day_link) : ?>
                                         <li><?php echo esc_html((string) $day_link['label'] . ' — ' . (int) $day_link['count']); ?></li>
@@ -1262,12 +1420,15 @@ function bw_link_page_render_analytics_tab($page_id)
                             <?php endif; ?>
                         </div>
                     <?php endif; ?>
-                    <?php if ($count > 0) : ?>
-                        <span style="font-size:11px;line-height:1;margin-bottom:4px;color:#222;"><?php echo esc_html((string) $count); ?></span>
+                    <?php if ($count > 0 || $views_count > 0) : ?>
+                        <span style="font-size:11px;line-height:1;margin-bottom:4px;color:#222;"><?php echo esc_html((string) $count . '/' . (string) $views_count); ?></span>
                     <?php else : ?>
                         <span aria-hidden="true" style="display:block;height:15px;"></span>
                     <?php endif; ?>
-                    <span style="display:block;width:100%;max-width:16px;border-radius:5px 5px 0 0;background:<?php echo esc_attr($bar_color); ?>;height:<?php echo esc_attr((string) $height_px); ?>px;transform-origin:bottom center;animation:bw-link-page-bar-rise 320ms ease-out both;"></span>
+                    <span style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px;width:100%;max-width:18px;align-items:end;">
+                        <span style="display:block;width:100%;border-radius:5px 5px 0 0;background:<?php echo esc_attr($click_bar_color); ?>;height:<?php echo esc_attr((string) $click_height_px); ?>px;transform-origin:bottom center;animation:bw-link-page-bar-rise 320ms ease-out both;"></span>
+                        <span style="display:block;width:100%;border-radius:5px 5px 0 0;background:<?php echo esc_attr($view_bar_color); ?>;height:<?php echo esc_attr((string) $view_height_px); ?>px;transform-origin:bottom center;animation:bw-link-page-bar-rise 320ms ease-out both;"></span>
+                    </span>
                 </div>
             <?php endforeach; ?>
         </div>
