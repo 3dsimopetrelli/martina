@@ -16,6 +16,7 @@ function bw_seo_social_get_settings()
         'default_title' => '',
         'default_description' => '',
         'default_image_id' => 0,
+        'facebook_app_id' => '',
     ];
 
     $raw = get_option(BW_SEO_SOCIAL_OPTION, []);
@@ -103,6 +104,7 @@ function bw_seo_social_sanitize_settings($raw)
         'default_title' => isset($raw['default_title']) ? sanitize_text_field((string) $raw['default_title']) : '',
         'default_description' => isset($raw['default_description']) ? sanitize_textarea_field((string) $raw['default_description']) : '',
         'default_image_id' => isset($raw['default_image_id']) ? absint($raw['default_image_id']) : 0,
+        'facebook_app_id' => isset($raw['facebook_app_id']) ? preg_replace('/[^0-9]/', '', (string) $raw['facebook_app_id']) : '',
     ];
 }
 
@@ -183,6 +185,13 @@ function bw_seo_social_render_admin_page()
                                 <?php endif; ?>
                             </div>
                             <p class="description"><?php esc_html_e('Recommended: 1200x630', 'bw'); ?></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="bw-seo-social-facebook-app-id"><?php esc_html_e('Facebook App ID (optional)', 'bw'); ?></label></th>
+                        <td>
+                            <input type="text" class="regular-text code" id="bw-seo-social-facebook-app-id" name="<?php echo esc_attr(BW_SEO_SOCIAL_OPTION); ?>[facebook_app_id]" value="<?php echo esc_attr(isset($settings['facebook_app_id']) ? (string) $settings['facebook_app_id'] : ''); ?>" inputmode="numeric" pattern="[0-9]*">
+                            <p class="description"><?php esc_html_e('Used as fallback for fb:app_id when not provided by your SEO plugin.', 'bw'); ?></p>
                         </td>
                     </tr>
                     </tbody>
@@ -445,6 +454,12 @@ function bw_seo_social_render_fallback_tags()
         echo '<meta property="og:image" content="' . esc_url($image) . '">' . "\n";
     }
 
+    $settings = bw_seo_social_get_settings();
+    $fb_app_id = isset($settings['facebook_app_id']) ? preg_replace('/[^0-9]/', '', (string) $settings['facebook_app_id']) : '';
+    if (is_string($fb_app_id) && '' !== $fb_app_id) {
+        echo '<meta property="fb:app_id" content="' . esc_attr($fb_app_id) . '">' . "\n";
+    }
+
     echo '<meta name="twitter:card" content="summary_large_image">' . "\n";
     if ('' !== $title) {
         echo '<meta name="twitter:title" content="' . esc_attr($title) . '">' . "\n";
@@ -498,6 +513,29 @@ function bw_seo_social_rankmath_prefer_jpg_png($image_url)
 }
 add_filter('rank_math/opengraph/facebook/image', 'bw_seo_social_rankmath_prefer_jpg_png', 20);
 add_filter('rank_math/opengraph/twitter/image', 'bw_seo_social_rankmath_prefer_jpg_png', 20);
+
+/**
+ * Rank Math compatibility: provide fb:app_id only when Rank Math output is empty.
+ *
+ * @param string $content
+ * @return string
+ */
+function bw_seo_social_rankmath_fb_app_id_fallback($content)
+{
+    $current = trim((string) $content);
+    if ('' !== $current) {
+        return $content;
+    }
+
+    $settings = bw_seo_social_get_settings();
+    $fb_app_id = isset($settings['facebook_app_id']) ? preg_replace('/[^0-9]/', '', (string) $settings['facebook_app_id']) : '';
+    if (!is_string($fb_app_id) || '' === $fb_app_id) {
+        return $content;
+    }
+
+    return $fb_app_id;
+}
+add_filter('rank_math/opengraph/facebook/fb_app_id', 'bw_seo_social_rankmath_fb_app_id_fallback', 20);
 
 /**
  * Rank Math compatibility: normalize typo in JSON-LD Organization/WebSite name.
