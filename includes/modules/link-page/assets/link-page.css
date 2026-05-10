@@ -12,6 +12,7 @@
     --bw-link-logo-rotate-duration: 18s;
     --bw-link-bg-image: none;
     --bw-link-bg-gradient: none;
+    --bw-link-admin-bar-offset: 0px;
 }
 
 * {
@@ -45,11 +46,27 @@ body {
 .wrapper {
     min-height: 100vh;
     min-height: 100svh;
+    min-height: calc(100vh - var(--bw-link-admin-bar-offset));
+    min-height: calc(100svh - var(--bw-link-admin-bar-offset));
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 40px 16px;
     animation: bw-link-page-fade-in 220ms ease-out both;
+}
+
+body.admin-bar {
+    --bw-link-admin-bar-offset: 32px;
+}
+
+@media (max-width: 782px) {
+    body.admin-bar {
+        --bw-link-admin-bar-offset: 46px;
+    }
+}
+
+body.admin-bar #wpadminbar {
+    position: fixed;
 }
 
 .container {
@@ -683,8 +700,9 @@ body {
 @media (min-width: 640px) {
     .wrapper {
         justify-content: flex-start;
-        padding-top: clamp(24px, 7svh, 84px);
-        padding-bottom: clamp(24px, 5svh, 56px);
+        align-items: center;
+        padding-top: clamp(16px, 3.5svh, 48px);
+        padding-bottom: clamp(20px, 4svh, 44px);
         padding-left: 16px;
         padding-right: 16px;
     }
