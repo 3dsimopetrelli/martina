@@ -39,6 +39,14 @@ body {
     text-rendering: optimizeLegibility;
 }
 
+/* Neutralize global smart-header body top padding on standalone Link Page only. */
+body.bw-link-page-logo-round,
+body.bw-link-page-logo-rotate,
+body.bw-link-page-gradient-animated,
+body[style*="--bw-link-bg:"] {
+    padding-top: 0 !important;
+}
+
 .bw-link-page-gradient-animated {
     animation: bw-link-page-fade-in 220ms ease-out both, bw-link-gradient-float 14s ease-in-out infinite alternate;
 }
