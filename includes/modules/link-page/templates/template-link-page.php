@@ -9,6 +9,8 @@ $title = isset($settings['title']) ? (string) $settings['title'] : '';
 $title_color = isset($settings['title_color']) ? sanitize_hex_color((string) $settings['title_color']) : '';
 $title_color = $title_color ? $title_color : '#000000';
 $description = isset($settings['description']) ? (string) $settings['description'] : '';
+$description_color = isset($settings['description_color']) ? sanitize_hex_color((string) $settings['description_color']) : '';
+$description_color = $description_color ? $description_color : '#111111';
 $newsletter_enabled = !empty($settings['newsletter_enabled']);
 $newsletter_show_name = !empty($settings['newsletter_show_name']);
 $newsletter_email_placeholder = isset($settings['newsletter_email_placeholder']) && '' !== trim((string) $settings['newsletter_email_placeholder'])
@@ -209,14 +211,15 @@ if ($background_gradient_enabled && $background_gradient_animated) {
 }
 
 $body_style = sprintf(
-    '--bw-link-bg:%1$s;--bw-link-logo-width:%2$spx;--bw-link-logo-rotate-duration:%3$ss;--bw-newsletter-focus-border:%4$s;--bw-newsletter-button-bg:%5$s;--bw-newsletter-button-text:%6$s;--bw-newsletter-privacy-text:%7$s;',
+    '--bw-link-bg:%1$s;--bw-link-logo-width:%2$spx;--bw-link-logo-rotate-duration:%3$ss;--bw-newsletter-focus-border:%4$s;--bw-newsletter-button-bg:%5$s;--bw-newsletter-button-text:%6$s;--bw-newsletter-privacy-text:%7$s;--bw-link-description-color:%8$s;',
     $background_color,
     (string) $logo_width,
     rtrim(rtrim(number_format($logo_rotate_speed, 1, '.', ''), '0'), '.'),
     $newsletter_focus_border_color,
     $newsletter_button_bg_color,
     $newsletter_button_text_color,
-    $newsletter_privacy_text_color
+    $newsletter_privacy_text_color,
+    $description_color
 );
 
 /**

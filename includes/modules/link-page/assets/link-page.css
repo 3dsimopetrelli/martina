@@ -117,7 +117,7 @@ body.admin-bar #wpadminbar {
 
 .description {
     margin: 0 0 28px;
-    color: #111111;
+    color: var(--bw-link-description-color, #111111);
     font-size: 16px;
     line-height: 1.55;
 }

@@ -53,6 +53,7 @@ function bw_link_page_get_settings()
         'title' => '',
         'title_color' => '',
         'description' => '',
+        'description_color' => '#111111',
         'seo_title' => '',
         'seo_description' => '',
         'seo_image_id' => 0,
@@ -156,6 +157,7 @@ function bw_link_page_sanitize_settings($raw)
         'title' => isset($raw['title']) ? sanitize_text_field($raw['title']) : '',
         'title_color' => isset($raw['title_color']) ? (string) sanitize_hex_color((string) $raw['title_color']) : '',
         'description' => isset($raw['description']) ? sanitize_textarea_field($raw['description']) : '',
+        'description_color' => isset($raw['description_color']) ? (string) sanitize_hex_color((string) $raw['description_color']) : '#111111',
         'seo_title' => isset($raw['seo_title']) ? sanitize_text_field($raw['seo_title']) : '',
         'seo_description' => isset($raw['seo_description']) ? sanitize_textarea_field($raw['seo_description']) : '',
         'seo_image_id' => isset($raw['seo_image_id']) ? absint($raw['seo_image_id']) : 0,
@@ -185,6 +187,10 @@ function bw_link_page_sanitize_settings($raw)
         'links' => [],
         'social_links' => [],
     ];
+
+    if (empty($settings['description_color'])) {
+        $settings['description_color'] = '#111111';
+    }
 
     if (!empty($raw['links']) && is_array($raw['links'])) {
         foreach ($raw['links'] as $link) {
@@ -1014,6 +1020,17 @@ function bw_link_page_render_settings_tab($settings, $pages, $logo_url)
                     <th scope="row"><label for="bw-link-page-description"><?php esc_html_e('Description (optional)', 'bw'); ?></label></th>
                     <td>
                         <textarea id="bw-link-page-description" class="large-text" rows="4" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[description]"><?php echo esc_textarea($settings['description']); ?></textarea>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="bw-link-page-description-color"><?php esc_html_e('Description text color', 'bw'); ?></label></th>
+                    <td>
+                        <input
+                            type="color"
+                            id="bw-link-page-description-color"
+                            name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[description_color]"
+                            value="<?php echo esc_attr(!empty($settings['description_color']) ? (string) $settings['description_color'] : '#111111'); ?>"
+                        >
                     </td>
                 </tr>
                 </tbody>
