@@ -15,10 +15,12 @@
     --bw-link-admin-bar-offset: 0px;
     --bw-link-title-color: #000000;
     --bw-link-title-font: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --bw-link-title-weight: 400;
     --bw-link-title-size: 42px;
     --bw-link-title-line-height: 1.1;
     --bw-link-description-color: #111111;
     --bw-link-description-font: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --bw-link-description-weight: 400;
     --bw-link-description-size: 18px;
     --bw-link-description-line-height: 1.5;
 }
@@ -117,10 +119,10 @@ body.admin-bar #wpadminbar {
 .title {
     margin: 0 0 14px;
     font-family: var(--bw-link-title-font, "Helvetica Neue", Helvetica, Arial, sans-serif);
+    font-weight: var(--bw-link-title-weight, 400);
     font-size: var(--bw-link-title-size, 42px);
     line-height: var(--bw-link-title-line-height, 1.1);
     letter-spacing: 0.01em;
-    font-weight: 700;
     color: var(--bw-link-title-color, #000000);
 }
 
@@ -128,6 +130,7 @@ body.admin-bar #wpadminbar {
     margin: 0 0 28px;
     color: var(--bw-link-description-color, #111111);
     font-family: var(--bw-link-description-font, "Helvetica Neue", Helvetica, Arial, sans-serif);
+    font-weight: var(--bw-link-description-weight, 400);
     font-size: var(--bw-link-description-size, 18px);
     line-height: var(--bw-link-description-line-height, 1.5);
 }

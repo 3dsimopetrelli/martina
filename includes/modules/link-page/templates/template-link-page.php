@@ -9,12 +9,14 @@ $title = isset($settings['title']) ? (string) $settings['title'] : '';
 $title_color = isset($settings['title_color']) ? sanitize_hex_color((string) $settings['title_color']) : '';
 $title_color = $title_color ? $title_color : '#000000';
 $title_font = isset($settings['title_font']) ? bw_link_page_sanitize_font_choice($settings['title_font']) : '';
+$title_font_weight = isset($settings['title_font_weight']) ? bw_link_page_sanitize_font_weight($settings['title_font_weight'], $title_font) : '400';
 $title_font_size = isset($settings['title_font_size']) ? bw_link_page_sanitize_font_size($settings['title_font_size'], 42, 12, 120) : 42;
 $title_line_height = isset($settings['title_line_height']) ? bw_link_page_sanitize_line_height($settings['title_line_height'], 1.1) : 1.1;
-$description = isset($settings['description']) ? (string) $settings['description'] : '';
+$description = isset($settings['description']) ? bw_link_page_sanitize_description_html($settings['description']) : '';
 $description_color = isset($settings['description_color']) ? sanitize_hex_color((string) $settings['description_color']) : '';
 $description_color = $description_color ? $description_color : '#111111';
 $description_font = isset($settings['description_font']) ? bw_link_page_sanitize_font_choice($settings['description_font']) : '';
+$description_font_weight = isset($settings['description_font_weight']) ? bw_link_page_sanitize_font_weight($settings['description_font_weight'], $description_font) : '400';
 $description_font_size = isset($settings['description_font_size']) ? bw_link_page_sanitize_font_size($settings['description_font_size'], 18, 10, 80) : 18;
 $description_line_height = isset($settings['description_line_height']) ? bw_link_page_sanitize_line_height($settings['description_line_height'], 1.5) : 1.5;
 $newsletter_enabled = !empty($settings['newsletter_enabled']);
@@ -219,7 +221,7 @@ if ($background_gradient_enabled && $background_gradient_animated) {
 $selected_fonts_css = bw_link_page_get_selected_fonts_css([$title_font, $description_font]);
 
 $body_style = sprintf(
-    '--bw-link-bg:%1$s;--bw-link-logo-width:%2$spx;--bw-link-logo-rotate-duration:%3$ss;--bw-newsletter-focus-border:%4$s;--bw-newsletter-button-bg:%5$s;--bw-newsletter-button-text:%6$s;--bw-newsletter-privacy-text:%7$s;--bw-link-title-color:%8$s;--bw-link-title-font:%9$s;--bw-link-title-size:%10$spx;--bw-link-title-line-height:%11$s;--bw-link-description-color:%12$s;--bw-link-description-font:%13$s;--bw-link-description-size:%14$spx;--bw-link-description-line-height:%15$s;',
+    '--bw-link-bg:%1$s;--bw-link-logo-width:%2$spx;--bw-link-logo-rotate-duration:%3$ss;--bw-newsletter-focus-border:%4$s;--bw-newsletter-button-bg:%5$s;--bw-newsletter-button-text:%6$s;--bw-newsletter-privacy-text:%7$s;--bw-link-title-color:%8$s;--bw-link-title-font:%9$s;--bw-link-title-weight:%10$s;--bw-link-title-size:%11$spx;--bw-link-title-line-height:%12$s;--bw-link-description-color:%13$s;--bw-link-description-font:%14$s;--bw-link-description-weight:%15$s;--bw-link-description-size:%16$spx;--bw-link-description-line-height:%17$s;',
     $background_color,
     (string) $logo_width,
     rtrim(rtrim(number_format($logo_rotate_speed, 1, '.', ''), '0'), '.'),
@@ -229,10 +231,12 @@ $body_style = sprintf(
     $newsletter_privacy_text_color,
     $title_color,
     bw_link_page_build_font_stack($title_font),
+    $title_font_weight,
     (string) $title_font_size,
     rtrim(rtrim(number_format($title_line_height, 2, '.', ''), '0'), '.'),
     $description_color,
     bw_link_page_build_font_stack($description_font),
+    $description_font_weight,
     (string) $description_font_size,
     rtrim(rtrim(number_format($description_line_height, 2, '.', ''), '0'), '.')
 );
@@ -303,7 +307,7 @@ if ($background_gradient_enabled) {
         <?php endif; ?>
 
         <?php if ('' !== $description) : ?>
-            <p class="description"><?php echo esc_html($description); ?></p>
+            <p class="description"><?php echo $description; ?></p>
         <?php endif; ?>
 
         <?php if ($newsletter_enabled) : ?>

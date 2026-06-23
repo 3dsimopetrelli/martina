@@ -26,6 +26,8 @@
         var seoImageRemoveButton = document.getElementById('bw-link-page-seo-image-remove');
         var seoImageInput = document.getElementById('bw-link-page-seo-image-id');
         var seoImagePreview = document.getElementById('bw-link-page-seo-image-preview');
+        var fontWeightsMap = window.bwLinkPageAdminConfig && window.bwLinkPageAdminConfig.fontWeights ? window.bwLinkPageAdminConfig.fontWeights : {};
+        var defaultFontWeights = window.bwLinkPageAdminConfig && window.bwLinkPageAdminConfig.defaultWeights ? window.bwLinkPageAdminConfig.defaultWeights : ['300', '400', '500', '600', '700'];
 
         function nextIndex(tableBody) {
             if (!tableBody) {
@@ -112,6 +114,74 @@
                     clear: function () {
                         $field.val('');
                     }
+                });
+            });
+        }
+
+        function getWeightsForFont(fontValue) {
+            if (fontValue && fontWeightsMap[fontValue] && Array.isArray(fontWeightsMap[fontValue]) && fontWeightsMap[fontValue].length) {
+                return fontWeightsMap[fontValue];
+            }
+
+            return defaultFontWeights;
+        }
+
+        function syncFontWeightSelect(weightSelect) {
+            if (!weightSelect) {
+                return;
+            }
+
+            var selector = weightSelect.getAttribute('data-font-select');
+            if (!selector) {
+                return;
+            }
+
+            var fontSelect = document.querySelector(selector);
+            if (!fontSelect) {
+                return;
+            }
+
+            var currentValue = String(weightSelect.value || '400');
+            var weights = getWeightsForFont(String(fontSelect.value || ''));
+
+            weightSelect.innerHTML = '';
+
+            weights.forEach(function (weight) {
+                var option = document.createElement('option');
+                option.value = weight;
+                option.textContent = weight;
+                if (weight === currentValue) {
+                    option.selected = true;
+                }
+                weightSelect.appendChild(option);
+            });
+
+            if (!weights.some(function (weight) { return weight === currentValue; })) {
+                weightSelect.value = weights.indexOf('400') !== -1 ? '400' : weights[0];
+            }
+        }
+
+        function initTypographyControls() {
+            var weightSelects = document.querySelectorAll('.bw-link-page-font-weight-select');
+            if (!weightSelects.length) {
+                return;
+            }
+
+            weightSelects.forEach(function (weightSelect) {
+                syncFontWeightSelect(weightSelect);
+
+                var selector = weightSelect.getAttribute('data-font-select');
+                if (!selector) {
+                    return;
+                }
+
+                var fontSelect = document.querySelector(selector);
+                if (!fontSelect) {
+                    return;
+                }
+
+                fontSelect.addEventListener('change', function () {
+                    syncFontWeightSelect(weightSelect);
                 });
             });
         }
@@ -386,6 +456,7 @@
         }
 
         initColorPickers(document);
+        initTypographyControls();
     }
 
     if (document.readyState === 'loading') {
