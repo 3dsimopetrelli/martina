@@ -13,6 +13,14 @@
     --bw-link-bg-image: none;
     --bw-link-bg-gradient: none;
     --bw-link-admin-bar-offset: 0px;
+    --bw-link-title-color: #000000;
+    --bw-link-title-font: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --bw-link-title-size: 42px;
+    --bw-link-title-line-height: 1.1;
+    --bw-link-description-color: #111111;
+    --bw-link-description-font: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --bw-link-description-size: 18px;
+    --bw-link-description-line-height: 1.5;
 }
 
 * {
@@ -108,18 +116,20 @@ body.admin-bar #wpadminbar {
 
 .title {
     margin: 0 0 14px;
-    font-size: 24px;
-    line-height: 1.12;
+    font-family: var(--bw-link-title-font, "Helvetica Neue", Helvetica, Arial, sans-serif);
+    font-size: var(--bw-link-title-size, 42px);
+    line-height: var(--bw-link-title-line-height, 1.1);
     letter-spacing: 0.01em;
     font-weight: 700;
-    color: #000000;
+    color: var(--bw-link-title-color, #000000);
 }
 
 .description {
     margin: 0 0 28px;
     color: var(--bw-link-description-color, #111111);
-    font-size: 16px;
-    line-height: 1.55;
+    font-family: var(--bw-link-description-font, "Helvetica Neue", Helvetica, Arial, sans-serif);
+    font-size: var(--bw-link-description-size, 18px);
+    line-height: var(--bw-link-description-line-height, 1.5);
 }
 
 .newsletter-block {
@@ -663,10 +673,6 @@ body.admin-bar #wpadminbar {
         min-height: 100svh;
         padding-top: 24px;
         padding-bottom: 24px;
-    }
-
-    .title {
-        font-size: 22px;
     }
 
     .newsletter-email-combo {

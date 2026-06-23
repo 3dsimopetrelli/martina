@@ -8,9 +8,15 @@ $links = isset($settings['links']) && is_array($settings['links']) ? $settings['
 $title = isset($settings['title']) ? (string) $settings['title'] : '';
 $title_color = isset($settings['title_color']) ? sanitize_hex_color((string) $settings['title_color']) : '';
 $title_color = $title_color ? $title_color : '#000000';
+$title_font = isset($settings['title_font']) ? bw_link_page_sanitize_font_choice($settings['title_font']) : '';
+$title_font_size = isset($settings['title_font_size']) ? bw_link_page_sanitize_font_size($settings['title_font_size'], 42, 12, 120) : 42;
+$title_line_height = isset($settings['title_line_height']) ? bw_link_page_sanitize_line_height($settings['title_line_height'], 1.1) : 1.1;
 $description = isset($settings['description']) ? (string) $settings['description'] : '';
 $description_color = isset($settings['description_color']) ? sanitize_hex_color((string) $settings['description_color']) : '';
 $description_color = $description_color ? $description_color : '#111111';
+$description_font = isset($settings['description_font']) ? bw_link_page_sanitize_font_choice($settings['description_font']) : '';
+$description_font_size = isset($settings['description_font_size']) ? bw_link_page_sanitize_font_size($settings['description_font_size'], 18, 10, 80) : 18;
+$description_line_height = isset($settings['description_line_height']) ? bw_link_page_sanitize_line_height($settings['description_line_height'], 1.5) : 1.5;
 $newsletter_enabled = !empty($settings['newsletter_enabled']);
 $newsletter_show_name = !empty($settings['newsletter_show_name']);
 $newsletter_email_placeholder = isset($settings['newsletter_email_placeholder']) && '' !== trim((string) $settings['newsletter_email_placeholder'])
@@ -210,8 +216,10 @@ if ($background_gradient_enabled && $background_gradient_animated) {
     $body_classes[] = 'bw-link-page-gradient-animated';
 }
 
+$selected_fonts_css = bw_link_page_get_selected_fonts_css([$title_font, $description_font]);
+
 $body_style = sprintf(
-    '--bw-link-bg:%1$s;--bw-link-logo-width:%2$spx;--bw-link-logo-rotate-duration:%3$ss;--bw-newsletter-focus-border:%4$s;--bw-newsletter-button-bg:%5$s;--bw-newsletter-button-text:%6$s;--bw-newsletter-privacy-text:%7$s;--bw-link-description-color:%8$s;',
+    '--bw-link-bg:%1$s;--bw-link-logo-width:%2$spx;--bw-link-logo-rotate-duration:%3$ss;--bw-newsletter-focus-border:%4$s;--bw-newsletter-button-bg:%5$s;--bw-newsletter-button-text:%6$s;--bw-newsletter-privacy-text:%7$s;--bw-link-title-color:%8$s;--bw-link-title-font:%9$s;--bw-link-title-size:%10$spx;--bw-link-title-line-height:%11$s;--bw-link-description-color:%12$s;--bw-link-description-font:%13$s;--bw-link-description-size:%14$spx;--bw-link-description-line-height:%15$s;',
     $background_color,
     (string) $logo_width,
     rtrim(rtrim(number_format($logo_rotate_speed, 1, '.', ''), '0'), '.'),
@@ -219,7 +227,14 @@ $body_style = sprintf(
     $newsletter_button_bg_color,
     $newsletter_button_text_color,
     $newsletter_privacy_text_color,
-    $description_color
+    $title_color,
+    bw_link_page_build_font_stack($title_font),
+    (string) $title_font_size,
+    rtrim(rtrim(number_format($title_line_height, 2, '.', ''), '0'), '.'),
+    $description_color,
+    bw_link_page_build_font_stack($description_font),
+    (string) $description_font_size,
+    rtrim(rtrim(number_format($description_line_height, 2, '.', ''), '0'), '.')
 );
 
 /**
@@ -269,6 +284,9 @@ if ($background_gradient_enabled) {
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?php echo esc_html(get_the_title()); ?></title>
     <link rel="stylesheet" href="<?php echo esc_url($css_url); ?>?ver=<?php echo esc_attr((string) (file_exists($css_path) ? filemtime($css_path) : '1.0.0')); ?>">
+    <?php if ('' !== $selected_fonts_css) : ?>
+        <style id="bw-link-page-selected-fonts"><?php echo $selected_fonts_css; ?></style>
+    <?php endif; ?>
     <?php wp_head(); ?>
 </head>
 <body class="<?php echo esc_attr(implode(' ', $body_classes)); ?>" style="<?php echo esc_attr($body_style); ?>">
@@ -281,7 +299,7 @@ if ($background_gradient_enabled) {
         <?php endif; ?>
 
         <?php if ('' !== $title) : ?>
-            <h1 class="title" style="color: <?php echo esc_attr($title_color); ?>;"><?php echo esc_html($title); ?></h1>
+            <h1 class="title"><?php echo esc_html($title); ?></h1>
         <?php endif; ?>
 
         <?php if ('' !== $description) : ?>

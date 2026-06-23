@@ -41,6 +41,189 @@ function bw_link_page_sanitize_css_color($color)
 }
 
 /**
+ * Return Theme Builder Lite custom font families, when available.
+ *
+ * @return array<int,string>
+ */
+function bw_link_page_get_available_font_families()
+{
+    if (!function_exists('bw_tbl_get_custom_font_families')) {
+        return [];
+    }
+
+    $families = bw_tbl_get_custom_font_families();
+    if (!is_array($families)) {
+        return [];
+    }
+
+    $normalized = [];
+    $seen = [];
+
+    foreach ($families as $family) {
+        $family = sanitize_text_field((string) $family);
+        if ('' === $family || isset($seen[$family])) {
+            continue;
+        }
+
+        $seen[$family] = true;
+        $normalized[] = $family;
+    }
+
+    return $normalized;
+}
+
+/**
+ * Sanitize a selected Link Page font family against available Theme Builder Lite fonts.
+ *
+ * @param mixed $value Raw font family setting.
+ * @return string
+ */
+function bw_link_page_sanitize_font_choice($value)
+{
+    $value = sanitize_text_field((string) $value);
+    if ('' === $value) {
+        return '';
+    }
+
+    $available_families = bw_link_page_get_available_font_families();
+    if (empty($available_families)) {
+        return '';
+    }
+
+    return in_array($value, $available_families, true) ? $value : '';
+}
+
+/**
+ * Clamp a numeric font size setting.
+ *
+ * @param mixed $value Raw numeric value.
+ * @param int   $default Default value.
+ * @param int   $min Minimum value.
+ * @param int   $max Maximum value.
+ * @return int
+ */
+function bw_link_page_sanitize_font_size($value, $default, $min, $max)
+{
+    if (!is_numeric($value)) {
+        return (int) $default;
+    }
+
+    $size = (int) round((float) $value);
+    return max((int) $min, min((int) $max, $size));
+}
+
+/**
+ * Clamp a numeric line-height setting.
+ *
+ * @param mixed $value Raw numeric value.
+ * @param float $default Default value.
+ * @return float
+ */
+function bw_link_page_sanitize_line_height($value, $default)
+{
+    if (!is_numeric($value)) {
+        return (float) $default;
+    }
+
+    $line_height = round((float) $value, 2);
+    return max(0.8, min(3.0, $line_height));
+}
+
+/**
+ * Convert a selected font family into a safe CSS font stack.
+ *
+ * @param string $font_family Selected custom font family.
+ * @return string
+ */
+function bw_link_page_build_font_stack($font_family)
+{
+    $default_stack = '"Helvetica Neue", Helvetica, Arial, sans-serif';
+    $font_family = bw_link_page_sanitize_font_choice($font_family);
+
+    if ('' === $font_family) {
+        return $default_stack;
+    }
+
+    $font_family = str_replace(['\\', '"'], ['\\\\', '\"'], $font_family);
+    return '"' . $font_family . '", ' . $default_stack;
+}
+
+/**
+ * Build inline @font-face CSS only for selected Link Page custom fonts.
+ *
+ * @param array<int,string> $font_families Selected font families.
+ * @return string
+ */
+function bw_link_page_get_selected_fonts_css($font_families)
+{
+    if (!function_exists('bw_tbl_get_valid_custom_fonts') || !is_array($font_families) || empty($font_families)) {
+        return '';
+    }
+
+    $selected = [];
+    foreach ($font_families as $font_family) {
+        $font_family = bw_link_page_sanitize_font_choice($font_family);
+        if ('' !== $font_family) {
+            $selected[$font_family] = true;
+        }
+    }
+
+    if (empty($selected)) {
+        return '';
+    }
+
+    $fonts = bw_tbl_get_valid_custom_fonts();
+    if (!is_array($fonts) || empty($fonts)) {
+        return '';
+    }
+
+    $css_rules = [];
+
+    foreach ($fonts as $font) {
+        if (!is_array($font)) {
+            continue;
+        }
+
+        $family = isset($font['font_family']) ? sanitize_text_field((string) $font['font_family']) : '';
+        if ('' === $family || !isset($selected[$family])) {
+            continue;
+        }
+
+        $sources = isset($font['sources']) && is_array($font['sources']) ? $font['sources'] : [];
+        $src_chunks = [];
+
+        if (!empty($sources['woff2'])) {
+            $src_chunks[] = 'url("' . esc_url_raw($sources['woff2']) . '") format("woff2")';
+        }
+
+        if (!empty($sources['woff'])) {
+            $src_chunks[] = 'url("' . esc_url_raw($sources['woff']) . '") format("woff")';
+        }
+
+        if (empty($src_chunks)) {
+            continue;
+        }
+
+        $weight = function_exists('bw_tbl_normalize_font_weight')
+            ? bw_tbl_normalize_font_weight(isset($font['font_weight']) ? $font['font_weight'] : '400')
+            : '400';
+        $style = function_exists('bw_tbl_normalize_font_style')
+            ? bw_tbl_normalize_font_style(isset($font['font_style']) ? $font['font_style'] : 'normal')
+            : 'normal';
+
+        $css_rules[] = sprintf(
+            "@font-face{font-family:'%s';src:%s;font-weight:%s;font-style:%s;font-display:swap;}",
+            esc_attr($family),
+            implode(',', $src_chunks),
+            esc_attr($weight),
+            esc_attr($style)
+        );
+    }
+
+    return empty($css_rules) ? '' : implode("\n", $css_rules);
+}
+
+/**
  * Return normalized Link Page settings.
  *
  * @return array<string,mixed>
@@ -52,8 +235,14 @@ function bw_link_page_get_settings()
         'logo_id' => 0,
         'title' => '',
         'title_color' => '',
+        'title_font' => '',
+        'title_font_size' => 42,
+        'title_line_height' => 1.1,
         'description' => '',
         'description_color' => '#111111',
+        'description_font' => '',
+        'description_font_size' => 18,
+        'description_line_height' => 1.5,
         'seo_title' => '',
         'seo_description' => '',
         'seo_image_id' => 0,
@@ -150,14 +339,26 @@ function bw_link_page_sanitize_settings($raw)
 
     $logo_rotate_speed = isset($raw['logo_rotate_speed']) && is_numeric($raw['logo_rotate_speed']) ? (float) $raw['logo_rotate_speed'] : 18.0;
     $logo_rotate_speed = max(2.0, min(120.0, $logo_rotate_speed));
+    $title_font = isset($raw['title_font']) ? bw_link_page_sanitize_font_choice($raw['title_font']) : '';
+    $description_font = isset($raw['description_font']) ? bw_link_page_sanitize_font_choice($raw['description_font']) : '';
+    $title_font_size = bw_link_page_sanitize_font_size(isset($raw['title_font_size']) ? $raw['title_font_size'] : null, 42, 12, 120);
+    $description_font_size = bw_link_page_sanitize_font_size(isset($raw['description_font_size']) ? $raw['description_font_size'] : null, 18, 10, 80);
+    $title_line_height = bw_link_page_sanitize_line_height(isset($raw['title_line_height']) ? $raw['title_line_height'] : null, 1.1);
+    $description_line_height = bw_link_page_sanitize_line_height(isset($raw['description_line_height']) ? $raw['description_line_height'] : null, 1.5);
 
     $settings = [
         'page_id' => isset($raw['page_id']) ? absint($raw['page_id']) : 0,
         'logo_id' => isset($raw['logo_id']) ? absint($raw['logo_id']) : 0,
         'title' => isset($raw['title']) ? sanitize_text_field($raw['title']) : '',
         'title_color' => isset($raw['title_color']) ? (string) sanitize_hex_color((string) $raw['title_color']) : '',
+        'title_font' => $title_font,
+        'title_font_size' => $title_font_size,
+        'title_line_height' => $title_line_height,
         'description' => isset($raw['description']) ? sanitize_textarea_field($raw['description']) : '',
         'description_color' => isset($raw['description_color']) ? (string) sanitize_hex_color((string) $raw['description_color']) : '#111111',
+        'description_font' => $description_font,
+        'description_font_size' => $description_font_size,
+        'description_line_height' => $description_line_height,
         'seo_title' => isset($raw['seo_title']) ? sanitize_text_field($raw['seo_title']) : '',
         'seo_description' => isset($raw['seo_description']) ? sanitize_textarea_field($raw['seo_description']) : '',
         'seo_image_id' => isset($raw['seo_image_id']) ? absint($raw['seo_image_id']) : 0,
@@ -860,6 +1061,7 @@ function bw_link_page_render_settings_tab($settings, $pages, $logo_url)
     $seo_image_id = isset($settings['seo_image_id']) ? (int) $settings['seo_image_id'] : 0;
     $seo_image_url = $seo_image_id > 0 ? wp_get_attachment_image_url($seo_image_id, 'large') : '';
     $social_links = isset($settings['social_links']) && is_array($settings['social_links']) ? $settings['social_links'] : [];
+    $available_font_families = bw_link_page_get_available_font_families();
     ?>
     <form method="post" action="options.php" class="bw-site-settings-form" style="max-width: 1180px;">
         <?php settings_fields('bw_link_page_settings_group'); ?>
@@ -1017,6 +1219,31 @@ function bw_link_page_render_settings_tab($settings, $pages, $logo_url)
                     </td>
                 </tr>
                 <tr>
+                    <th scope="row"><label for="bw-link-page-title-font"><?php esc_html_e('Title font', 'bw'); ?></label></th>
+                    <td>
+                        <select id="bw-link-page-title-font" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[title_font]">
+                            <option value=""><?php esc_html_e('Default', 'bw'); ?></option>
+                            <?php foreach ($available_font_families as $font_family) : ?>
+                                <option value="<?php echo esc_attr($font_family); ?>" <?php selected(isset($settings['title_font']) ? (string) $settings['title_font'] : '', $font_family); ?>>
+                                    <?php echo esc_html($font_family); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="bw-link-page-title-font-size"><?php esc_html_e('Title font size', 'bw'); ?></label></th>
+                    <td>
+                        <input type="number" min="12" max="120" step="1" id="bw-link-page-title-font-size" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[title_font_size]" value="<?php echo esc_attr((string) (isset($settings['title_font_size']) ? (int) $settings['title_font_size'] : 42)); ?>">
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="bw-link-page-title-line-height"><?php esc_html_e('Title line height', 'bw'); ?></label></th>
+                    <td>
+                        <input type="number" min="0.8" max="3" step="0.05" id="bw-link-page-title-line-height" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[title_line_height]" value="<?php echo esc_attr((string) (isset($settings['title_line_height']) ? $settings['title_line_height'] : 1.1)); ?>">
+                    </td>
+                </tr>
+                <tr>
                     <th scope="row"><label for="bw-link-page-description"><?php esc_html_e('Description (optional)', 'bw'); ?></label></th>
                     <td>
                         <textarea id="bw-link-page-description" class="large-text" rows="4" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[description]"><?php echo esc_textarea($settings['description']); ?></textarea>
@@ -1031,6 +1258,31 @@ function bw_link_page_render_settings_tab($settings, $pages, $logo_url)
                             name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[description_color]"
                             value="<?php echo esc_attr(!empty($settings['description_color']) ? (string) $settings['description_color'] : '#111111'); ?>"
                         >
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="bw-link-page-description-font"><?php esc_html_e('Description font', 'bw'); ?></label></th>
+                    <td>
+                        <select id="bw-link-page-description-font" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[description_font]">
+                            <option value=""><?php esc_html_e('Default', 'bw'); ?></option>
+                            <?php foreach ($available_font_families as $font_family) : ?>
+                                <option value="<?php echo esc_attr($font_family); ?>" <?php selected(isset($settings['description_font']) ? (string) $settings['description_font'] : '', $font_family); ?>>
+                                    <?php echo esc_html($font_family); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="bw-link-page-description-font-size"><?php esc_html_e('Description font size', 'bw'); ?></label></th>
+                    <td>
+                        <input type="number" min="10" max="80" step="1" id="bw-link-page-description-font-size" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[description_font_size]" value="<?php echo esc_attr((string) (isset($settings['description_font_size']) ? (int) $settings['description_font_size'] : 18)); ?>">
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="bw-link-page-description-line-height"><?php esc_html_e('Description line height', 'bw'); ?></label></th>
+                    <td>
+                        <input type="number" min="0.8" max="3" step="0.05" id="bw-link-page-description-line-height" name="<?php echo esc_attr(BW_LINK_PAGE_OPTION); ?>[description_line_height]" value="<?php echo esc_attr((string) (isset($settings['description_line_height']) ? $settings['description_line_height'] : 1.5)); ?>">
                     </td>
                 </tr>
                 </tbody>
