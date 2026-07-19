@@ -1201,6 +1201,51 @@ function bw_link_page_get_analytics_daily_clicks($page_id)
     return $series;
 }
 
+function bw_link_page_get_analytics_daily_telegram_clicks($page_id)
+{
+    global $wpdb;
+
+    $table = bw_link_page_get_clicks_table_name();
+    $click_where = bw_link_page_click_event_where_clause();
+    $start = wp_date('Y-m-d 00:00:00', strtotime('-29 days', current_time('timestamp')));
+
+    $rows = $wpdb->get_results(
+        $wpdb->prepare(
+            "SELECT DATE(clicked_at) AS click_day, COUNT(*) AS clicks
+            FROM {$table}
+            WHERE page_id = %d AND {$click_where} AND link_id = %s AND clicked_at >= %s
+            GROUP BY DATE(clicked_at)
+            ORDER BY click_day ASC",
+            $page_id,
+            'telegram-channel',
+            $start
+        ),
+        ARRAY_A
+    );
+
+    $mapped = [];
+    if (is_array($rows)) {
+        foreach ($rows as $row) {
+            if (empty($row['click_day'])) {
+                continue;
+            }
+            $mapped[(string) $row['click_day']] = (int) $row['clicks'];
+        }
+    }
+
+    $series = [];
+    for ($offset = 29; $offset >= 0; $offset--) {
+        $day = wp_date('Y-m-d', strtotime('-' . $offset . ' days', current_time('timestamp')));
+        $series[] = [
+            'date' => $day,
+            'label' => wp_date('M j', strtotime($day)),
+            'count' => isset($mapped[$day]) ? (int) $mapped[$day] : 0,
+        ];
+    }
+
+    return $series;
+}
+
 function bw_link_page_get_analytics_daily_views($page_id)
 {
     global $wpdb;
@@ -1991,6 +2036,7 @@ function bw_link_page_render_analytics_tab($page_id)
     $summary = bw_link_page_get_analytics_summary($page_id);
     $views_summary = bw_link_page_get_analytics_views_summary($page_id);
     $daily_series = bw_link_page_get_analytics_daily_clicks($page_id);
+    $daily_telegram = bw_link_page_get_analytics_daily_telegram_clicks($page_id);
     $daily_views = bw_link_page_get_analytics_daily_views($page_id);
     $daily_breakdown = bw_link_page_get_analytics_daily_breakdown($page_id);
     $link_rows = bw_link_page_get_analytics_link_rows($page_id);
@@ -1998,7 +2044,9 @@ function bw_link_page_render_analytics_tab($page_id)
     $max_daily = 0;
     foreach ($daily_series as $index => $point) {
         $view_point = isset($daily_views[$index]) ? $daily_views[$index] : ['count' => 0];
-        $max_daily = max($max_daily, (int) $point['count'], (int) $view_point['count']);
+        $telegram_point = isset($daily_telegram[$index]) ? $daily_telegram[$index] : ['count' => 0];
+        $standard_clicks = max(0, (int) $point['count'] - (int) $telegram_point['count']);
+        $max_daily = max($max_daily, $standard_clicks, (int) $view_point['count'], (int) $telegram_point['count']);
     }
 
     $cards = [
@@ -2119,11 +2167,14 @@ function bw_link_page_render_analytics_tab($page_id)
         </div>
         <p style="margin:0 0 10px;color:#444;font-size:12px;">
             <span style="display:inline-flex;align-items:center;gap:6px;margin-right:14px;"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#80FD03;"></span><?php esc_html_e('Green = Link clicks', 'bw'); ?></span>
-            <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#ef4a4a;"></span><?php esc_html_e('Red = Page views', 'bw'); ?></span>
+            <span style="display:inline-flex;align-items:center;gap:6px;margin-right:14px;"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#ef4a4a;"></span><?php esc_html_e('Red = Page views', 'bw'); ?></span>
+            <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#229ED9;"></span><?php esc_html_e('Blue = Telegram clicks', 'bw'); ?></span>
         </p>
         <div style="display:grid;grid-template-columns:repeat(30,minmax(0,1fr));gap:6px;align-items:end;min-height:150px;padding:14px;border:1px solid #d9d9d9;border-radius:10px;background:#fff;">
             <?php foreach ($daily_series as $index => $point) :
-                $count = (int) $point['count'];
+                $total_clicks = (int) $point['count'];
+                $telegram_clicks = isset($daily_telegram[$index]['count']) ? (int) $daily_telegram[$index]['count'] : 0;
+                $count = max(0, $total_clicks - $telegram_clicks);
                 $views_count = isset($daily_views[$index]['count']) ? (int) $daily_views[$index]['count'] : 0;
                 $bar_max_height = 120;
                 $bar_min_height = 3;
@@ -2133,24 +2184,30 @@ function bw_link_page_render_analytics_tab($page_id)
                 $view_height_px = $max_daily > 0
                     ? max($bar_min_height, (int) floor(($views_count / $max_daily) * $bar_max_height))
                     : $bar_min_height;
+                $telegram_height_px = $max_daily > 0
+                    ? max($bar_min_height, (int) floor(($telegram_clicks / $max_daily) * $bar_max_height))
+                    : $bar_min_height;
                 $click_bar_color = $count > 0 ? '#80FD03' : '#dfe5d9';
                 $view_bar_color = $views_count > 0 ? '#ef4a4a' : '#f1d7d7';
+                $telegram_bar_color = $telegram_clicks > 0 ? '#229ED9' : '#d7eaf8';
                 $point_date = isset($point['date']) ? (string) $point['date'] : '';
                 $day_links = isset($daily_breakdown[$point_date]) && is_array($daily_breakdown[$point_date]) ? $daily_breakdown[$point_date] : [];
                 ?>
-                <div class="bw-link-page-chart-day" title="<?php echo esc_attr($point['date'] . ': ' . $count . ' clicks, ' . $views_count . ' views'); ?>" aria-label="<?php echo esc_attr($point['date'] . ': ' . $count . ' clicks, ' . $views_count . ' views'); ?>">
-                    <?php if ($count > 0 || $views_count > 0) : ?>
+                <div class="bw-link-page-chart-day" title="<?php echo esc_attr($point['date'] . ': ' . $count . ' link clicks, ' . $telegram_clicks . ' Telegram clicks, ' . $views_count . ' views'); ?>" aria-label="<?php echo esc_attr($point['date'] . ': ' . $count . ' link clicks, ' . $telegram_clicks . ' Telegram clicks, ' . $views_count . ' views'); ?>">
+                    <?php if ($count > 0 || $views_count > 0 || $telegram_clicks > 0) : ?>
                         <div class="bw-link-page-chart-tooltip" role="tooltip">
                             <div class="bw-link-page-chart-tooltip__date"><?php echo esc_html($point_date); ?></div>
                             <div class="bw-link-page-chart-tooltip__total">
                                 <?php
                                 printf(
-                                    /* translators: %d: clicks count */
-                                    esc_html__('Link clicks: %1$d', 'bw'),
+                                    /* translators: %d: standard click count */
+                                    esc_html__('Standard link clicks: %1$d', 'bw'),
                                     $count
                                 );
                                 ?>
                             </div>
+                            <div class="bw-link-page-chart-tooltip__total"><?php printf(esc_html__('Telegram clicks: %d', 'bw'), $telegram_clicks); ?></div>
+                            <div class="bw-link-page-chart-tooltip__total"><?php printf(esc_html__('Total clicks: %d', 'bw'), $total_clicks); ?></div>
                             <div class="bw-link-page-chart-tooltip__total"><?php printf(esc_html__('Page views: %d', 'bw'), $views_count); ?></div>
                             <?php if (!empty($day_links)) : ?>
                                 <div class="bw-link-page-chart-tooltip__total" style="margin-top:2px;"><?php esc_html_e('Links:', 'bw'); ?></div>
@@ -2162,14 +2219,19 @@ function bw_link_page_render_analytics_tab($page_id)
                             <?php endif; ?>
                         </div>
                     <?php endif; ?>
-                    <?php if ($count > 0 || $views_count > 0) : ?>
-                        <span style="font-size:11px;line-height:1;margin-bottom:4px;color:#222;"><?php echo esc_html((string) $count . '/' . (string) $views_count); ?></span>
+                    <?php if ($count > 0 || $views_count > 0 || $telegram_clicks > 0) : ?>
+                        <span style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2px;width:100%;max-width:28px;margin-bottom:4px;align-items:end;">
+                            <span style="font-size:11px;line-height:1;color:<?php echo $count > 0 ? '#4f8d00' : 'transparent'; ?>;text-align:center;"><?php echo $count > 0 ? esc_html((string) $count) : '&nbsp;'; ?></span>
+                            <span style="font-size:11px;line-height:1;color:<?php echo $views_count > 0 ? '#ef4a4a' : 'transparent'; ?>;text-align:center;"><?php echo $views_count > 0 ? esc_html((string) $views_count) : '&nbsp;'; ?></span>
+                            <span style="font-size:11px;line-height:1;color:<?php echo $telegram_clicks > 0 ? '#229ED9' : 'transparent'; ?>;text-align:center;"><?php echo $telegram_clicks > 0 ? esc_html((string) $telegram_clicks) : '&nbsp;'; ?></span>
+                        </span>
                     <?php else : ?>
                         <span aria-hidden="true" style="display:block;height:15px;"></span>
                     <?php endif; ?>
-                    <span style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px;width:100%;max-width:18px;align-items:end;">
+                    <span style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2px;width:100%;max-width:28px;align-items:end;">
                         <span style="display:block;width:100%;border-radius:5px 5px 0 0;background:<?php echo esc_attr($click_bar_color); ?>;height:<?php echo esc_attr((string) $click_height_px); ?>px;transform-origin:bottom center;animation:bw-link-page-bar-rise 320ms ease-out both;"></span>
                         <span style="display:block;width:100%;border-radius:5px 5px 0 0;background:<?php echo esc_attr($view_bar_color); ?>;height:<?php echo esc_attr((string) $view_height_px); ?>px;transform-origin:bottom center;animation:bw-link-page-bar-rise 320ms ease-out both;"></span>
+                        <span style="display:block;width:100%;border-radius:5px 5px 0 0;background:<?php echo esc_attr($telegram_bar_color); ?>;height:<?php echo esc_attr((string) $telegram_height_px); ?>px;transform-origin:bottom center;animation:bw-link-page-bar-rise 320ms ease-out both;"></span>
                     </span>
                 </div>
             <?php endforeach; ?>
