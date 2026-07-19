@@ -475,6 +475,7 @@ function bw_link_page_get_settings()
         'newsletter_button_text_color' => '#333333',
         'newsletter_privacy_text_color' => '#000000',
         'telegram_enabled' => 0,
+        'telegram_test_mode' => 0,
         'telegram_channel' => '',
         'telegram_button_label' => 'Telegram',
         'telegram_button_subtitle' => '',
@@ -548,6 +549,7 @@ function bw_link_page_sanitize_settings($raw)
     if ('telegram' === $form_scope) {
         $raw = array_merge($existing_settings, $raw);
         $raw['telegram_enabled'] = !empty($submitted_raw['telegram_enabled']) ? 1 : 0;
+        $raw['telegram_test_mode'] = !empty($submitted_raw['telegram_test_mode']) ? 1 : 0;
         $raw['telegram_show_icon'] = !empty($submitted_raw['telegram_show_icon']) ? 1 : 0;
         $raw['telegram_new_tab'] = !empty($submitted_raw['telegram_new_tab']) ? 1 : 0;
     }
@@ -619,6 +621,7 @@ function bw_link_page_sanitize_settings($raw)
         'newsletter_button_text_color' => isset($raw['newsletter_button_text_color']) ? (string) sanitize_hex_color((string) $raw['newsletter_button_text_color']) : '#333333',
         'newsletter_privacy_text_color' => isset($raw['newsletter_privacy_text_color']) ? (string) sanitize_hex_color((string) $raw['newsletter_privacy_text_color']) : '#000000',
         'telegram_enabled' => array_key_exists('telegram_enabled', $raw) ? (!empty($raw['telegram_enabled']) ? 1 : 0) : (!empty($existing_settings['telegram_enabled']) ? 1 : 0),
+        'telegram_test_mode' => array_key_exists('telegram_test_mode', $raw) ? (!empty($raw['telegram_test_mode']) ? 1 : 0) : (!empty($existing_settings['telegram_test_mode']) ? 1 : 0),
         'telegram_channel' => array_key_exists('telegram_channel', $raw) ? $telegram_channel : (isset($existing_settings['telegram_channel']) ? (string) $existing_settings['telegram_channel'] : ''),
         'telegram_button_label' => array_key_exists('telegram_button_label', $raw) ? sanitize_text_field($raw['telegram_button_label']) : (isset($existing_settings['telegram_button_label']) ? (string) $existing_settings['telegram_button_label'] : 'Telegram'),
         'telegram_button_subtitle' => array_key_exists('telegram_button_subtitle', $raw) ? sanitize_text_field($raw['telegram_button_subtitle']) : (isset($existing_settings['telegram_button_subtitle']) ? (string) $existing_settings['telegram_button_subtitle'] : ''),
@@ -1817,6 +1820,7 @@ function bw_link_page_render_telegram_tab($settings)
 {
     $telegram_channel = isset($settings['telegram_channel']) ? bw_link_page_normalize_telegram_channel($settings['telegram_channel']) : '';
     $telegram_url = bw_link_page_get_telegram_url($telegram_channel);
+    $telegram_test_mode = !empty($settings['telegram_test_mode']);
     $button_label = isset($settings['telegram_button_label']) && '' !== trim((string) $settings['telegram_button_label'])
         ? (string) $settings['telegram_button_label']
         : 'Telegram';
@@ -1837,6 +1841,15 @@ function bw_link_page_render_telegram_tab($settings)
                         <label>
                             <input type="checkbox" name="telegram_enabled" value="1" <?php checked(!empty($settings['telegram_enabled'])); ?>>
                             <?php esc_html_e('Show Telegram button on Link Page', 'bw'); ?>
+                        </label>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><?php esc_html_e('Test mode', 'bw'); ?></th>
+                    <td>
+                        <label>
+                            <input type="checkbox" name="telegram_test_mode" value="1" <?php checked($telegram_test_mode); ?>>
+                            <?php esc_html_e('Show the Telegram button for design testing without opening a Telegram channel.', 'bw'); ?>
                         </label>
                     </td>
                 </tr>
@@ -1912,9 +1925,14 @@ function bw_link_page_render_telegram_tab($settings)
                 </tbody>
             </table>
 
-            <?php if (!empty($settings['telegram_enabled']) && '' === $telegram_url) : ?>
+            <?php if (!empty($settings['telegram_enabled']) && !$telegram_test_mode && '' === $telegram_url) : ?>
                 <p class="notice notice-warning inline" style="padding:12px 14px;margin-top:16px;">
                     <?php esc_html_e('Telegram is enabled, but the channel is empty or invalid. The frontend button will not render until a valid public channel is provided.', 'bw'); ?>
+                </p>
+            <?php endif; ?>
+            <?php if ($telegram_test_mode) : ?>
+                <p class="notice notice-info inline" style="padding:12px 14px;margin-top:16px;">
+                    <?php esc_html_e('Test mode is active. The button is visible, but it only reloads the Link Page and does not open Telegram.', 'bw'); ?>
                 </p>
             <?php endif; ?>
         </section>
@@ -1934,6 +1952,7 @@ function bw_link_page_save_telegram_settings()
 
     $settings = bw_link_page_get_settings();
     $settings['telegram_enabled'] = !empty($_POST['telegram_enabled']) ? 1 : 0;
+    $settings['telegram_test_mode'] = !empty($_POST['telegram_test_mode']) ? 1 : 0;
     $settings['telegram_channel'] = isset($_POST['telegram_channel']) ? bw_link_page_normalize_telegram_channel(wp_unslash($_POST['telegram_channel'])) : '';
     $settings['telegram_button_label'] = isset($_POST['telegram_button_label']) ? sanitize_text_field(wp_unslash($_POST['telegram_button_label'])) : 'Telegram';
     if ('' === $settings['telegram_button_label']) {

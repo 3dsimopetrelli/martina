@@ -136,6 +136,7 @@ foreach ($links as $index => $link) {
 $telegram_channel = isset($settings['telegram_channel']) ? bw_link_page_normalize_telegram_channel($settings['telegram_channel']) : '';
 $telegram_url = bw_link_page_get_telegram_url($telegram_channel);
 $telegram_enabled = !empty($settings['telegram_enabled']);
+$telegram_test_mode = !empty($settings['telegram_test_mode']);
 $telegram_label = isset($settings['telegram_button_label']) && '' !== trim((string) $settings['telegram_button_label'])
     ? (string) $settings['telegram_button_label']
     : 'Telegram';
@@ -155,7 +156,9 @@ if (!empty($telegram_border_color)) {
 if (!empty($telegram_text_color)) {
     $telegram_link_style_parts[] = '--bw-link-button-text:' . $telegram_text_color;
 }
-$render_telegram = $telegram_enabled && '' !== $telegram_url;
+$telegram_test_url = $page_id > 0 ? get_permalink($page_id) : '';
+$telegram_href = $telegram_test_mode ? (is_string($telegram_test_url) ? $telegram_test_url : '') : $telegram_url;
+$render_telegram = $telegram_enabled && ($telegram_test_mode || '' !== $telegram_url);
 
 $should_load_tracking_js = ($page_id > 0 && (!empty($render_links) || $render_telegram));
 $should_load_newsletter_js = $newsletter_enabled;
@@ -425,30 +428,35 @@ if ($background_gradient_enabled) {
         </div>
 
         <?php if ($render_telegram) : ?>
-            <a
-                class="link-item link-item--telegram<?php echo '' !== $telegram_subtitle ? ' has-subtitle' : ''; ?>"
-                href="<?php echo esc_url($telegram_url); ?>"
-                data-bw-link-id="telegram-channel"
-                data-bw-link-label="<?php echo esc_attr($telegram_label); ?>"
-                <?php echo '' !== implode(';', $telegram_link_style_parts) ? ' style="' . esc_attr(implode(';', $telegram_link_style_parts)) . '"' : ''; ?>
-                <?php echo $telegram_new_tab ? ' target="_blank" rel="noopener noreferrer"' : ''; ?>
-            >
-                <span class="link-item-telegram-content">
-                    <span class="link-item-telegram-main-row">
-                        <?php if ($telegram_show_icon) : ?>
-                            <span class="link-item-telegram-icon" aria-hidden="true">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" focusable="false">
-                                    <path d="M21.8 3.6c.3.2.4.7.2 1L18.3 19c-.1.4-.5.7-.9.7-.2 0-.3 0-.5-.1l-5.1-2.4-2.6 2.6c-.2.2-.4.2-.6.2-.1 0-.2 0-.3-.1-.3-.1-.5-.4-.5-.8v-4.1L18.2 6 9.7 13.7l7.3 3.4 3.2-11.6L4.6 11.2l3.6 1.7c.4.2.6.7.4 1.1-.1.4-.4.6-.8.6-.1 0-.2 0-.4-.1L2.1 12c-.3-.1-.5-.4-.5-.7 0-.4.2-.7.6-.9L20.9 3.4c.3-.1.6-.1.9.2Z"/>
-                                </svg>
-                            </span>
-                        <?php endif; ?>
-                        <span class="link-item-telegram-label"><?php echo esc_html($telegram_label); ?></span>
-                    </span>
-                    <?php if ('' !== $telegram_subtitle) : ?>
-                        <span class="link-item-telegram-subtitle"><?php echo esc_html($telegram_subtitle); ?></span>
+            <div class="telegram-link-wrapper">
+                <a
+                    class="link-item link-item--telegram<?php echo '' !== $telegram_subtitle ? ' has-subtitle' : ''; ?>"
+                    href="<?php echo esc_url($telegram_href); ?>"
+                    <?php echo $telegram_test_mode ? ' data-telegram-test-mode="1"' : ''; ?>
+                    <?php if (!$telegram_test_mode) : ?>
+                        data-bw-link-id="telegram-channel"
+                        data-bw-link-label="<?php echo esc_attr($telegram_label); ?>"
                     <?php endif; ?>
-                </span>
-            </a>
+                    <?php echo '' !== implode(';', $telegram_link_style_parts) ? ' style="' . esc_attr(implode(';', $telegram_link_style_parts)) . '"' : ''; ?>
+                    <?php echo (!$telegram_test_mode && $telegram_new_tab) ? ' target="_blank" rel="noopener noreferrer"' : ''; ?>
+                >
+                    <span class="link-item-telegram-content">
+                        <span class="link-item-telegram-main-row">
+                            <?php if ($telegram_show_icon) : ?>
+                                <span class="link-item-telegram-icon" aria-hidden="true">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" focusable="false">
+                                        <path d="M21.8 3.6c.3.2.4.7.2 1L18.3 19c-.1.4-.5.7-.9.7-.2 0-.3 0-.5-.1l-5.1-2.4-2.6 2.6c-.2.2-.4.2-.6.2-.1 0-.2 0-.3-.1-.3-.1-.5-.4-.5-.8v-4.1L18.2 6 9.7 13.7l7.3 3.4 3.2-11.6L4.6 11.2l3.6 1.7c.4.2.6.7.4 1.1-.1.4-.4.6-.8.6-.1 0-.2 0-.4-.1L2.1 12c-.3-.1-.5-.4-.5-.7 0-.4.2-.7.6-.9L20.9 3.4c.3-.1.6-.1.9.2Z"/>
+                                    </svg>
+                                </span>
+                            <?php endif; ?>
+                            <span class="link-item-telegram-label"><?php echo esc_html($telegram_label); ?></span>
+                        </span>
+                        <?php if ('' !== $telegram_subtitle) : ?>
+                            <span class="link-item-telegram-subtitle"><?php echo esc_html($telegram_subtitle); ?></span>
+                        <?php endif; ?>
+                    </span>
+                </a>
+            </div>
         <?php endif; ?>
 
         <?php if ($has_socials) : ?>
