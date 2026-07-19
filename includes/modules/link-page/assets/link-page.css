@@ -546,7 +546,7 @@ body.admin-bar #wpadminbar {
     width: 100%;
     min-height: 70px;
     padding: 12px 22px;
-    border: 3px solid #111111;
+    border: 3px solid var(--bw-link-button-border, #111111);
     background: var(--bw-link-button-bg, transparent);
     border-radius: 22px;
     color: var(--bw-link-button-text, #111111);
@@ -561,7 +561,7 @@ body.admin-bar #wpadminbar {
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 5px 6px 0 0 #000000;
+    box-shadow: 5px 6px 0 0 var(--bw-link-button-border, #000000);
     transition: transform 0.12s ease, opacity 0.12s ease;
 }
 
@@ -583,6 +583,59 @@ body.admin-bar #wpadminbar {
 }
 
 .link-item-email-address {
+    display: block;
+    font-size: 0.52em;
+    line-height: 1.2;
+    opacity: 0.95;
+    word-break: break-word;
+}
+
+.link-item--telegram {
+    margin-top: 16px;
+}
+
+.link-item-telegram-content {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    width: 100%;
+    min-width: 0;
+}
+
+.link-item-telegram-main-row {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.link-item-telegram-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    flex: 0 0 auto;
+    line-height: 1;
+}
+
+.link-item-telegram-icon svg {
+    display: block;
+    width: 24px;
+    height: 24px;
+}
+
+.link-item-telegram-label {
+    display: block;
+    min-width: 0;
+    word-break: break-word;
+}
+
+.link-item-telegram-subtitle {
     display: block;
     font-size: 0.52em;
     line-height: 1.2;
@@ -637,7 +690,7 @@ body.admin-bar #wpadminbar {
 
 .link-item:active {
     transform: translate(2px, 2px);
-    box-shadow: 3px 4px 0 0 #000000;
+    box-shadow: 3px 4px 0 0 var(--bw-link-button-border, #000000);
 }
 
 .link-item:active::after {

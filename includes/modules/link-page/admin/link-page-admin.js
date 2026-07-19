@@ -26,6 +26,9 @@
         var seoImageRemoveButton = document.getElementById('bw-link-page-seo-image-remove');
         var seoImageInput = document.getElementById('bw-link-page-seo-image-id');
         var seoImagePreview = document.getElementById('bw-link-page-seo-image-preview');
+        var telegramChannelInput = document.getElementById('bw-link-page-telegram-channel');
+        var telegramUrlPreview = document.getElementById('bw-link-page-telegram-url-preview');
+        var telegramOpenLink = document.getElementById('bw-link-page-telegram-open-link');
         var fontWeightsMap = window.bwLinkPageAdminConfig && window.bwLinkPageAdminConfig.fontWeights ? window.bwLinkPageAdminConfig.fontWeights : {};
         var defaultFontWeights = window.bwLinkPageAdminConfig && window.bwLinkPageAdminConfig.defaultWeights ? window.bwLinkPageAdminConfig.defaultWeights : ['300', '400', '500', '600', '700'];
 
@@ -184,6 +187,59 @@
                     syncFontWeightSelect(weightSelect);
                 });
             });
+        }
+
+        function normalizeTelegramChannel(value) {
+            var normalized = typeof value === 'string' ? value.trim().replace(/\s+/g, '') : '';
+            var match;
+            var parsedUrl;
+
+            if (!normalized) {
+                return '';
+            }
+
+            if (normalized.charAt(0) === '@') {
+                normalized = normalized.slice(1);
+            }
+
+            if (/^t\.me\//i.test(normalized)) {
+                normalized = 'https://' + normalized;
+            }
+
+            if (/^https?:\/\//i.test(normalized)) {
+                try {
+                    parsedUrl = new URL(normalized);
+                } catch (error) {
+                    return '';
+                }
+
+                if (!/^(www\.)?(t\.me|telegram\.me)$/i.test(parsedUrl.hostname)) {
+                    return '';
+                }
+
+                normalized = parsedUrl.pathname.replace(/^\/+|\/+$/g, '').split('/')[0] || '';
+            }
+
+            normalized = normalized.replace(/^@+/, '').toLowerCase();
+            match = normalized.match(/^[a-z0-9_]{3,64}$/);
+
+            return match ? normalized : '';
+        }
+
+        function syncTelegramPreview() {
+            var username;
+            var url;
+
+            if (!telegramChannelInput || !telegramUrlPreview || !telegramOpenLink) {
+                return;
+            }
+
+            username = normalizeTelegramChannel(telegramChannelInput.value);
+            url = username ? 'https://t.me/' + username : '';
+
+            telegramUrlPreview.textContent = url;
+            telegramOpenLink.href = url || '#';
+            telegramOpenLink.style.display = url ? '' : 'none';
         }
 
         function createSocialLinkRow(index) {
@@ -457,6 +513,12 @@
 
         initColorPickers(document);
         initTypographyControls();
+        syncTelegramPreview();
+
+        if (telegramChannelInput) {
+            telegramChannelInput.addEventListener('input', syncTelegramPreview);
+            telegramChannelInput.addEventListener('change', syncTelegramPreview);
+        }
     }
 
     if (document.readyState === 'loading') {

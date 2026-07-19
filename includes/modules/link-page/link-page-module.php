@@ -366,6 +366,79 @@ function bw_link_page_sanitize_description_html($value)
 }
 
 /**
+ * Normalize a Telegram channel input to a public username.
+ *
+ * @param mixed $value Raw Telegram channel value.
+ * @return string
+ */
+function bw_link_page_normalize_telegram_channel($value)
+{
+    $value = trim((string) $value);
+    if ('' === $value) {
+        return '';
+    }
+
+    $value = preg_replace('/\s+/', '', $value);
+    $value = is_string($value) ? $value : '';
+    if ('' === $value) {
+        return '';
+    }
+
+    if (0 === stripos($value, '@')) {
+        $value = substr($value, 1);
+    }
+
+    if (0 === stripos($value, 't.me/')) {
+        $value = 'https://' . $value;
+    }
+
+    if (preg_match('#^https?://#i', $value)) {
+        $parts = wp_parse_url($value);
+        if (!is_array($parts)) {
+            return '';
+        }
+
+        $host = isset($parts['host']) ? strtolower((string) $parts['host']) : '';
+        if (!in_array($host, ['t.me', 'www.t.me', 'telegram.me', 'www.telegram.me'], true)) {
+            return '';
+        }
+
+        $path = isset($parts['path']) ? trim((string) $parts['path'], '/') : '';
+        if ('' === $path) {
+            return '';
+        }
+
+        $segments = explode('/', $path);
+        $value = isset($segments[0]) ? (string) $segments[0] : '';
+    }
+
+    $value = ltrim($value, '@');
+    $value = strtolower($value);
+
+    if (!preg_match('/^[a-z0-9_]{3,64}$/', $value)) {
+        return '';
+    }
+
+    return $value;
+}
+
+/**
+ * Build a public Telegram URL from a normalized channel username.
+ *
+ * @param mixed $channel Raw or normalized Telegram channel value.
+ * @return string
+ */
+function bw_link_page_get_telegram_url($channel)
+{
+    $username = bw_link_page_normalize_telegram_channel($channel);
+    if ('' === $username) {
+        return '';
+    }
+
+    return 'https://t.me/' . rawurlencode($username);
+}
+
+/**
  * Return normalized Link Page settings.
  *
  * @return array<string,mixed>
@@ -401,6 +474,15 @@ function bw_link_page_get_settings()
         'newsletter_button_bg_color' => '#ffffff',
         'newsletter_button_text_color' => '#333333',
         'newsletter_privacy_text_color' => '#000000',
+        'telegram_enabled' => 0,
+        'telegram_channel' => '',
+        'telegram_button_label' => 'Telegram',
+        'telegram_button_subtitle' => '',
+        'telegram_show_icon' => 1,
+        'telegram_new_tab' => 1,
+        'telegram_button_color' => '',
+        'telegram_border_color' => '',
+        'telegram_text_color' => '',
         'background_color' => '#0f0f0f',
         'background_image_id' => 0,
         'background_gradient_enabled' => 1,
@@ -459,6 +541,17 @@ function bw_link_page_get_settings()
 function bw_link_page_sanitize_settings($raw)
 {
     $raw = is_array($raw) ? $raw : [];
+    $existing_settings = bw_link_page_get_settings();
+    $submitted_raw = $raw;
+    $form_scope = isset($raw['form_scope']) ? sanitize_key((string) $raw['form_scope']) : 'settings';
+
+    if ('telegram' === $form_scope) {
+        $raw = array_merge($existing_settings, $raw);
+        $raw['telegram_enabled'] = !empty($submitted_raw['telegram_enabled']) ? 1 : 0;
+        $raw['telegram_show_icon'] = !empty($submitted_raw['telegram_show_icon']) ? 1 : 0;
+        $raw['telegram_new_tab'] = !empty($submitted_raw['telegram_new_tab']) ? 1 : 0;
+    }
+
     $background_color = isset($raw['background_color']) ? sanitize_hex_color((string) $raw['background_color']) : '';
     if ('' === $background_color || null === $background_color) {
         $background_color = '#0f0f0f';
@@ -487,6 +580,10 @@ function bw_link_page_sanitize_settings($raw)
     $description_font = isset($raw['description_font']) ? bw_link_page_sanitize_font_choice($raw['description_font']) : '';
     $title_font_weight = bw_link_page_sanitize_font_weight(isset($raw['title_font_weight']) ? $raw['title_font_weight'] : '400', $title_font);
     $description_font_weight = bw_link_page_sanitize_font_weight(isset($raw['description_font_weight']) ? $raw['description_font_weight'] : '400', $description_font);
+    $telegram_channel = isset($raw['telegram_channel']) ? bw_link_page_normalize_telegram_channel($raw['telegram_channel']) : '';
+    $telegram_button_color = isset($raw['telegram_button_color']) ? (string) sanitize_hex_color((string) $raw['telegram_button_color']) : '';
+    $telegram_border_color = isset($raw['telegram_border_color']) ? (string) sanitize_hex_color((string) $raw['telegram_border_color']) : '';
+    $telegram_text_color = isset($raw['telegram_text_color']) ? (string) sanitize_hex_color((string) $raw['telegram_text_color']) : '';
     $title_font_size = bw_link_page_sanitize_font_size(isset($raw['title_font_size']) ? $raw['title_font_size'] : null, 42, 12, 120);
     $description_font_size = bw_link_page_sanitize_font_size(isset($raw['description_font_size']) ? $raw['description_font_size'] : null, 18, 10, 80);
     $title_line_height = bw_link_page_sanitize_line_height(isset($raw['title_line_height']) ? $raw['title_line_height'] : null, 1.1);
@@ -521,6 +618,15 @@ function bw_link_page_sanitize_settings($raw)
         'newsletter_button_bg_color' => isset($raw['newsletter_button_bg_color']) ? (string) sanitize_hex_color((string) $raw['newsletter_button_bg_color']) : '#ffffff',
         'newsletter_button_text_color' => isset($raw['newsletter_button_text_color']) ? (string) sanitize_hex_color((string) $raw['newsletter_button_text_color']) : '#333333',
         'newsletter_privacy_text_color' => isset($raw['newsletter_privacy_text_color']) ? (string) sanitize_hex_color((string) $raw['newsletter_privacy_text_color']) : '#000000',
+        'telegram_enabled' => array_key_exists('telegram_enabled', $raw) ? (!empty($raw['telegram_enabled']) ? 1 : 0) : (!empty($existing_settings['telegram_enabled']) ? 1 : 0),
+        'telegram_channel' => array_key_exists('telegram_channel', $raw) ? $telegram_channel : (isset($existing_settings['telegram_channel']) ? (string) $existing_settings['telegram_channel'] : ''),
+        'telegram_button_label' => array_key_exists('telegram_button_label', $raw) ? sanitize_text_field($raw['telegram_button_label']) : (isset($existing_settings['telegram_button_label']) ? (string) $existing_settings['telegram_button_label'] : 'Telegram'),
+        'telegram_button_subtitle' => array_key_exists('telegram_button_subtitle', $raw) ? sanitize_text_field($raw['telegram_button_subtitle']) : (isset($existing_settings['telegram_button_subtitle']) ? (string) $existing_settings['telegram_button_subtitle'] : ''),
+        'telegram_show_icon' => array_key_exists('telegram_show_icon', $raw) ? (!empty($raw['telegram_show_icon']) ? 1 : 0) : (!isset($existing_settings['telegram_show_icon']) || !empty($existing_settings['telegram_show_icon']) ? 1 : 0),
+        'telegram_new_tab' => array_key_exists('telegram_new_tab', $raw) ? (!empty($raw['telegram_new_tab']) ? 1 : 0) : (!isset($existing_settings['telegram_new_tab']) || !empty($existing_settings['telegram_new_tab']) ? 1 : 0),
+        'telegram_button_color' => array_key_exists('telegram_button_color', $raw) ? $telegram_button_color : (isset($existing_settings['telegram_button_color']) ? (string) $existing_settings['telegram_button_color'] : ''),
+        'telegram_border_color' => array_key_exists('telegram_border_color', $raw) ? $telegram_border_color : (isset($existing_settings['telegram_border_color']) ? (string) $existing_settings['telegram_border_color'] : ''),
+        'telegram_text_color' => array_key_exists('telegram_text_color', $raw) ? $telegram_text_color : (isset($existing_settings['telegram_text_color']) ? (string) $existing_settings['telegram_text_color'] : ''),
         'background_color' => $background_color,
         'background_image_id' => isset($raw['background_image_id']) ? absint($raw['background_image_id']) : 0,
         'background_gradient_enabled' => !isset($raw['background_gradient_enabled']) || !empty($raw['background_gradient_enabled']) ? 1 : 0,
@@ -539,6 +645,9 @@ function bw_link_page_sanitize_settings($raw)
 
     if (empty($settings['description_color'])) {
         $settings['description_color'] = '#111111';
+    }
+    if (empty($settings['telegram_button_label'])) {
+        $settings['telegram_button_label'] = 'Telegram';
     }
 
     if (!empty($raw['links']) && is_array($raw['links'])) {
@@ -1704,6 +1813,155 @@ function bw_link_page_render_settings_tab($settings, $pages, $logo_url)
     <?php
 }
 
+function bw_link_page_render_telegram_tab($settings)
+{
+    $telegram_channel = isset($settings['telegram_channel']) ? bw_link_page_normalize_telegram_channel($settings['telegram_channel']) : '';
+    $telegram_url = bw_link_page_get_telegram_url($telegram_channel);
+    $button_label = isset($settings['telegram_button_label']) && '' !== trim((string) $settings['telegram_button_label'])
+        ? (string) $settings['telegram_button_label']
+        : 'Telegram';
+    $button_subtitle = isset($settings['telegram_button_subtitle']) ? (string) $settings['telegram_button_subtitle'] : '';
+    ?>
+    <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" class="bw-site-settings-form" style="max-width: 980px;">
+        <input type="hidden" name="action" value="bw_link_page_save_telegram_settings">
+        <?php wp_nonce_field('bw_link_page_save_telegram_settings', 'bw_link_page_telegram_nonce'); ?>
+
+        <section class="bw-admin-card">
+            <h2 class="bw-admin-card-title"><?php esc_html_e('Telegram Channel', 'bw'); ?></h2>
+            <p class="bw-admin-card-helper"><?php esc_html_e('Connect a public Telegram channel and display it as a button on the Link Page.', 'bw'); ?></p>
+            <table class="form-table bw-admin-form-grid" role="presentation">
+                <tbody>
+                <tr>
+                    <th scope="row"><?php esc_html_e('Enable Telegram button', 'bw'); ?></th>
+                    <td>
+                        <label>
+                            <input type="checkbox" name="telegram_enabled" value="1" <?php checked(!empty($settings['telegram_enabled'])); ?>>
+                            <?php esc_html_e('Show Telegram button on Link Page', 'bw'); ?>
+                        </label>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="bw-link-page-telegram-channel"><?php esc_html_e('Telegram channel', 'bw'); ?></label></th>
+                    <td>
+                        <input
+                            type="text"
+                            class="regular-text"
+                            id="bw-link-page-telegram-channel"
+                            name="telegram_channel"
+                            value="<?php echo esc_attr($telegram_channel); ?>"
+                            placeholder="martinasarritzu"
+                        >
+                        <p class="description"><?php esc_html_e('Enter the public channel username, with or without @, or paste the complete t.me link.', 'bw'); ?></p>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><?php esc_html_e('Channel URL', 'bw'); ?></th>
+                    <td>
+                        <code id="bw-link-page-telegram-url-preview"><?php echo esc_html($telegram_url); ?></code>
+                        <a
+                            id="bw-link-page-telegram-open-link"
+                            href="<?php echo esc_url($telegram_url); ?>"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style="<?php echo '' !== $telegram_url ? '' : 'display:none;'; ?>margin-left:10px;"
+                        ><?php esc_html_e('Open channel', 'bw'); ?></a>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="bw-link-page-telegram-button-label"><?php esc_html_e('Button label', 'bw'); ?></label></th>
+                    <td>
+                        <input type="text" class="regular-text" id="bw-link-page-telegram-button-label" name="telegram_button_label" value="<?php echo esc_attr($button_label); ?>">
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="bw-link-page-telegram-button-subtitle"><?php esc_html_e('Optional subtitle', 'bw'); ?></label></th>
+                    <td>
+                        <input type="text" class="regular-text" id="bw-link-page-telegram-button-subtitle" name="telegram_button_subtitle" value="<?php echo esc_attr($button_subtitle); ?>" placeholder="<?php esc_attr_e('Join my channel', 'bw'); ?>">
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><?php esc_html_e('Show Telegram icon', 'bw'); ?></th>
+                    <td>
+                        <label>
+                            <input type="checkbox" name="telegram_show_icon" value="1" <?php checked(!isset($settings['telegram_show_icon']) || !empty($settings['telegram_show_icon'])); ?>>
+                            <?php esc_html_e('Display inline Telegram icon before the label', 'bw'); ?>
+                        </label>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><?php esc_html_e('Open in new tab', 'bw'); ?></th>
+                    <td>
+                        <label>
+                            <input type="checkbox" name="telegram_new_tab" value="1" <?php checked(!isset($settings['telegram_new_tab']) || !empty($settings['telegram_new_tab'])); ?>>
+                            <?php esc_html_e('Use target="_blank"', 'bw'); ?>
+                        </label>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="bw-link-page-telegram-button-color"><?php esc_html_e('Button background color', 'bw'); ?></label></th>
+                    <td><input type="text" class="bw-link-page-color-field" id="bw-link-page-telegram-button-color" name="telegram_button_color" value="<?php echo esc_attr(isset($settings['telegram_button_color']) ? (string) $settings['telegram_button_color'] : ''); ?>" placeholder="<?php esc_attr_e('Default', 'bw'); ?>"></td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="bw-link-page-telegram-border-color"><?php esc_html_e('Border color', 'bw'); ?></label></th>
+                    <td><input type="text" class="bw-link-page-color-field" id="bw-link-page-telegram-border-color" name="telegram_border_color" value="<?php echo esc_attr(isset($settings['telegram_border_color']) ? (string) $settings['telegram_border_color'] : ''); ?>" placeholder="<?php esc_attr_e('Default', 'bw'); ?>"></td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="bw-link-page-telegram-text-color"><?php esc_html_e('Text color', 'bw'); ?></label></th>
+                    <td><input type="text" class="bw-link-page-color-field" id="bw-link-page-telegram-text-color" name="telegram_text_color" value="<?php echo esc_attr(isset($settings['telegram_text_color']) ? (string) $settings['telegram_text_color'] : ''); ?>" placeholder="<?php esc_attr_e('Default', 'bw'); ?>"></td>
+                </tr>
+                </tbody>
+            </table>
+
+            <?php if (!empty($settings['telegram_enabled']) && '' === $telegram_url) : ?>
+                <p class="notice notice-warning inline" style="padding:12px 14px;margin-top:16px;">
+                    <?php esc_html_e('Telegram is enabled, but the channel is empty or invalid. The frontend button will not render until a valid public channel is provided.', 'bw'); ?>
+                </p>
+            <?php endif; ?>
+        </section>
+
+        <?php submit_button(__('Save Telegram Settings', 'bw')); ?>
+    </form>
+    <?php
+}
+
+function bw_link_page_save_telegram_settings()
+{
+    if (!current_user_can('manage_options')) {
+        wp_die(esc_html__('You are not allowed to manage Link Page settings.', 'bw'));
+    }
+
+    check_admin_referer('bw_link_page_save_telegram_settings', 'bw_link_page_telegram_nonce');
+
+    $settings = bw_link_page_get_settings();
+    $settings['telegram_enabled'] = !empty($_POST['telegram_enabled']) ? 1 : 0;
+    $settings['telegram_channel'] = isset($_POST['telegram_channel']) ? bw_link_page_normalize_telegram_channel(wp_unslash($_POST['telegram_channel'])) : '';
+    $settings['telegram_button_label'] = isset($_POST['telegram_button_label']) ? sanitize_text_field(wp_unslash($_POST['telegram_button_label'])) : 'Telegram';
+    if ('' === $settings['telegram_button_label']) {
+        $settings['telegram_button_label'] = 'Telegram';
+    }
+    $settings['telegram_button_subtitle'] = isset($_POST['telegram_button_subtitle']) ? sanitize_text_field(wp_unslash($_POST['telegram_button_subtitle'])) : '';
+    $settings['telegram_show_icon'] = !empty($_POST['telegram_show_icon']) ? 1 : 0;
+    $settings['telegram_new_tab'] = !empty($_POST['telegram_new_tab']) ? 1 : 0;
+    $settings['telegram_button_color'] = isset($_POST['telegram_button_color']) ? (string) sanitize_hex_color((string) wp_unslash($_POST['telegram_button_color'])) : '';
+    $settings['telegram_border_color'] = isset($_POST['telegram_border_color']) ? (string) sanitize_hex_color((string) wp_unslash($_POST['telegram_border_color'])) : '';
+    $settings['telegram_text_color'] = isset($_POST['telegram_text_color']) ? (string) sanitize_hex_color((string) wp_unslash($_POST['telegram_text_color'])) : '';
+
+    update_option(BW_LINK_PAGE_OPTION, $settings);
+
+    $redirect_url = add_query_arg(
+        [
+            'page' => 'bw-link-page-settings',
+            'tab' => 'telegram',
+            'updated' => '1',
+        ],
+        admin_url('admin.php')
+    );
+
+    wp_safe_redirect($redirect_url);
+    exit;
+}
+add_action('admin_post_bw_link_page_save_telegram_settings', 'bw_link_page_save_telegram_settings');
+
 function bw_link_page_render_analytics_tab($page_id)
 {
     if ($page_id <= 0) {
@@ -1935,7 +2193,7 @@ function bw_link_page_render_admin_page()
     $page_id = !empty($settings['page_id']) ? (int) $settings['page_id'] : 0;
 
     $active_tab = isset($_GET['tab']) ? sanitize_key(wp_unslash($_GET['tab'])) : 'settings';
-    if (!in_array($active_tab, ['settings', 'analytics'], true)) {
+    if (!in_array($active_tab, ['settings', 'analytics', 'telegram'], true)) {
         $active_tab = 'settings';
     }
 
@@ -1950,14 +2208,23 @@ function bw_link_page_render_admin_page()
             <a href="<?php echo esc_url(admin_url('admin.php?page=bw-link-page-settings&tab=analytics')); ?>" class="nav-tab <?php echo 'analytics' === $active_tab ? 'nav-tab-active' : ''; ?>">
                 <?php esc_html_e('Analytics', 'bw'); ?>
             </a>
+            <a href="<?php echo esc_url(admin_url('admin.php?page=bw-link-page-settings&tab=telegram')); ?>" class="nav-tab <?php echo 'telegram' === $active_tab ? 'nav-tab-active' : ''; ?>">
+                <?php esc_html_e('Telegram', 'bw'); ?>
+            </a>
         </nav>
+
+        <?php if ('1' === (isset($_GET['updated']) ? sanitize_text_field(wp_unslash($_GET['updated'])) : '')) : ?>
+            <div class="notice notice-success is-dismissible"><p><?php esc_html_e('Link Page settings saved.', 'bw'); ?></p></div>
+        <?php endif; ?>
 
         <?php if ('settings' === $active_tab) : ?>
             <p><?php esc_html_e('Configure one dedicated lightweight Link Page.', 'bw'); ?></p>
             <?php bw_link_page_render_settings_tab($settings, $pages, $logo_url); ?>
-        <?php else : ?>
+        <?php elseif ('analytics' === $active_tab) : ?>
             <p><?php esc_html_e('Internal click analytics for the selected Link Page.', 'bw'); ?></p>
             <?php bw_link_page_render_analytics_tab($page_id); ?>
+        <?php else : ?>
+            <?php bw_link_page_render_telegram_tab($settings); ?>
         <?php endif; ?>
     </div>
     <?php
